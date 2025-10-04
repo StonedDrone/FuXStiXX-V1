@@ -1,15 +1,33 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { POWERS, SUPER_POWERS } from '../constants';
 
 const Sidebar: React.FC = () => {
-  const PowerListItem = ({ power }: { power: typeof POWERS[0]}) => (
-    <li className="flex items-start" title={power.description}>
-        <span className="mr-3 text-lg">{power.emoji}</span> 
-        <span className={`flex-1 ${power.font}`} style={{ color: power.color }}>
-          {power.name}
-        </span>
-    </li>
-  );
+  const PowerListItem = ({ power }: { power: typeof POWERS[0]}) => {
+    const [isHovered, setIsHovered] = useState(false);
+
+    return (
+        <li 
+            className="flex items-start p-1 rounded-md transition-all duration-200 cursor-pointer" 
+            title={power.description}
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
+            style={{
+                backgroundColor: isHovered ? `${power.color}1A` : 'transparent', // ~10% opacity glow
+            }}
+        >
+            <span className="mr-3 text-lg">{power.emoji}</span> 
+            <span 
+                className={`flex-1 ${power.font}`} 
+                style={{ 
+                    color: power.color,
+                    textShadow: isHovered ? `0 0 5px ${power.color}` : 'none'
+                }}
+            >
+              {power.name}
+            </span>
+        </li>
+    );
+  };
 
   return (
     <aside className="w-80 bg-layer-1 border-r border-layer-3 flex flex-col p-4 overflow-y-auto">

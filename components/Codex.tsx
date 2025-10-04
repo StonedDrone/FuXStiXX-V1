@@ -10,10 +10,19 @@ interface CodexProps {
 const Codex: React.FC<CodexProps> = ({ isOpen, onClose }) => {
     
     const PowerEntry = ({ power }: { power: typeof POWERS[0]}) => (
-        <div className="mb-4 border-b border-layer-3 pb-2">
+        <div 
+            className="mb-4 border-b-2 pb-2 transition-all duration-300"
+            style={{ borderColor: `${power.color}80` }} // Using 50% opacity for the border
+        >
             <h3 className="text-lg flex items-center">
                 <span className="mr-3 text-xl">{power.emoji}</span> 
-                <span className={`${power.font}`} style={{ color: power.color }}>
+                <span 
+                    className={`${power.font}`} 
+                    style={{ 
+                        color: power.color,
+                        textShadow: `0 0 4px ${power.color}B3` // Adding a subtle, persistent glow with ~70% opacity
+                    }}
+                >
                 {power.name}
                 </span>
             </h3>

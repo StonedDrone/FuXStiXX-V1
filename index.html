@@ -76,5 +76,16 @@
   <body class="bg-base text-secondary">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').then(registration => {
+            console.log('Chaos Engine Service Worker registered: ', registration);
+          }).catch(registrationError => {
+            console.log('Service Worker registration failed: ', registrationError);
+          });
+        });
+      }
+    </script>
   </body>
 </html>

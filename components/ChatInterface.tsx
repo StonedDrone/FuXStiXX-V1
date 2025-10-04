@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Message, Attachment } from '../types';
 import { CHECK_IN_PROMPT } from '../constants';
@@ -11,23 +10,57 @@ import { XIcon } from './icons/XIcon';
 import { AttachmentIcon } from './icons/AttachmentIcons';
 
 const ChatInterface: React.FC = () => {
-  const [messages, setMessages] = useState<Message[]>([
-    {
+  const initialMessage: Message = {
       id: 'init',
       text: 'FuXStiXX online. I am your co-pilot, Captain. Ready to progress the Mission. How may I assist?',
       sender: 'ai',
-    },
-  ]);
+  };
+
+  const [messages, setMessages] = useState<Message[]>(() => {
+      try {
+        const savedMessages = localStorage.getItem('fuxstixx-chat-history');
+        if (savedMessages) {
+          const parsed = JSON.parse(savedMessages);
+          // Don't load an empty history
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed;
+          }
+        }
+        return [initialMessage];
+      } catch (error) {
+        console.error("Failed to parse chat history from localStorage", error);
+        return [initialMessage];
+      }
+  });
+
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [attachments, setAttachments] = useState<File[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
+
+  useEffect(() => {
+    localStorage.setItem('fuxstixx-chat-history', JSON.stringify(messages));
+  }, [messages]);
+
+  useEffect(() => {
+    const goOnline = () => setIsOnline(true);
+    const goOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+
+    return () => {
+      window.removeEventListener('online', goOnline);
+      window.removeEventListener('offline', goOffline);
+    };
+  }, []);
 
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -43,7 +76,7 @@ const ChatInterface: React.FC = () => {
 
   const handleSend = useCallback(async (prompt?: string) => {
     const userMessageText = prompt || input;
-    if ((!userMessageText.trim() && attachments.length === 0) || isLoading) return;
+    if ((!userMessageText.trim() && attachments.length === 0) || isLoading || !isOnline) return;
 
     const messageAttachments: Attachment[] = attachments.map(file => ({
         name: file.name,
@@ -57,6 +90,8 @@ const ChatInterface: React.FC = () => {
       attachments: messageAttachments,
     };
     
+    const historyForApi = [...messages, userMessage];
+
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
     const attachmentsToSend = [...attachments];
@@ -92,7 +127,7 @@ const ChatInterface: React.FC = () => {
           parts.push(...fileParts);
       }
 
-      const stream = await sendMessageToAI(parts);
+      const stream = await sendMessageToAI(historyForApi, parts);
       let fullResponse = '';
       for await (const chunk of stream) {
         fullResponse += chunk.text;
@@ -106,13 +141,13 @@ const ChatInterface: React.FC = () => {
       console.error('Error sending message to AI:', error);
        setMessages((prev) =>
           prev.map((msg) =>
-            msg.id === aiResponseId ? { ...msg, text: 'Sorry, I encountered an error. Please check the console or API key.' } : msg
+            msg.id === aiResponseId ? { ...msg, text: 'Sorry, I encountered an error. Please check the console, your API key, or network connection.' } : msg
           )
         );
     } finally {
       setIsLoading(false);
     }
-  }, [input, isLoading, attachments]);
+  }, [input, isLoading, attachments, messages, isOnline]);
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -157,7 +192,7 @@ const ChatInterface: React.FC = () => {
           {messages.map((msg) => (
             <ChatMessage key={msg.id} message={msg} />
           ))}
-          {isLoading && messages[messages.length-1].sender === 'user' && (
+          {isLoading && messages[messages.length-1]?.sender === 'user' && (
              <ChatMessage key="loading" message={{id: 'loading', sender: 'ai', text: '...'}} />
           )}
         </div>
@@ -169,7 +204,8 @@ const ChatInterface: React.FC = () => {
             <div className="flex justify-center mb-4">
                 <button
                     onClick={() => handleSend(CHECK_IN_PROMPT)}
-                    className="p-3 px-6 bg-layer-1 border border-layer-3 rounded-lg text-center text-sm hover:bg-layer-2 hover:border-primary transition-colors duration-200"
+                    className="p-3 px-6 bg-layer-1 border border-layer-3 rounded-lg text-center text-sm hover:bg-layer-2 hover:border-primary transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={!isOnline || isLoading}
                 >
                     Mission Check-in
                 </button>
@@ -188,20 +224,25 @@ const ChatInterface: React.FC = () => {
                 ))}
             </div>
         )}
+         {!isOnline && (
+            <div className="text-center text-xs text-danger mb-2 font-mono">
+                SYSTEM OFFLINE - Connection to mothership lost.
+            </div>
+        )}
         <div className="relative flex items-center">
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder="Command your co-pilot, Captain... (drag & drop files or zip folders)"
-            className="w-full bg-layer-1 border border-layer-3 rounded-lg p-3 pr-32 text-gray-200 focus:outline-none focus:ring-2 focus:ring-accent resize-none font-mono text-sm"
+            placeholder={isOnline ? "Command your co-pilot, Captain... (drag & drop files or zip folders)" : "System is offline..."}
+            className="w-full bg-layer-1 border border-layer-3 rounded-lg p-3 pr-32 text-gray-200 focus:outline-none focus:ring-2 focus:ring-accent resize-none font-mono text-sm disabled:opacity-50"
             rows={1}
-            disabled={isLoading}
+            disabled={isLoading || !isOnline}
           />
           <div className="absolute right-3 flex items-center space-x-1">
             <button
                 onClick={() => fileInputRef.current?.click()}
-                disabled={isLoading}
+                disabled={isLoading || !isOnline}
                 className="p-2 rounded-full text-secondary disabled:text-layer-3 disabled:cursor-not-allowed hover:text-primary transition-colors duration-200"
                 aria-label="Attach files"
                 title="Attach files"
@@ -210,7 +251,7 @@ const ChatInterface: React.FC = () => {
             </button>
             <button
                 onClick={handleVision}
-                disabled={isLoading}
+                disabled={isLoading || !isOnline}
                 className="p-2 rounded-full text-secondary disabled:text-layer-3 disabled:cursor-not-allowed hover:text-primary transition-colors duration-200"
                 aria-label="Activate Visual Cortex"
                 title="Activate Visual Cortex"
@@ -219,7 +260,7 @@ const ChatInterface: React.FC = () => {
             </button>
             <button
               onClick={() => handleSend()}
-              disabled={isLoading || (!input.trim() && attachments.length === 0)}
+              disabled={isLoading || !isOnline || (!input.trim() && attachments.length === 0)}
               className="p-2 rounded-full bg-accent text-black disabled:bg-layer-3 disabled:text-secondary disabled:cursor-not-allowed hover:bg-primary transition-colors duration-200"
               aria-label="Send message"
             >

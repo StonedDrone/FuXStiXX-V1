@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { POWERS, SUPER_POWERS, CREATIVE_POWERS } from '../constants';
+import { POWERS, SUPER_POWERS, CREATIVE_POWERS, HUGGING_FACE_POWERS } from '../constants';
 
 interface SidebarProps {
   onPowerClick: (prompt: string) => void;
@@ -58,6 +58,14 @@ const Sidebar: React.FC<SidebarProps> = ({ onPowerClick }) => {
         <h2 className="text-lg font-semibold text-gray-200 mb-4 font-mono">Creative Powers</h2>
         <div className="space-y-3 text-sm">
           {CREATIVE_POWERS.map(power => (
+            <PowerListItem key={power.name} power={power} onClick={() => onPowerClick(power.prompt)} />
+          ))}
+        </div>
+      </div>
+      <div className="mt-8 flex-shrink-0">
+        <h2 className="text-lg font-semibold text-gray-200 mb-4 font-mono">Hugging Face Ops</h2>
+        <div className="space-y-3 text-sm">
+          {HUGGING_FACE_POWERS.map(power => (
             <PowerListItem key={power.name} power={power} onClick={() => onPowerClick(power.prompt)} />
           ))}
         </div>

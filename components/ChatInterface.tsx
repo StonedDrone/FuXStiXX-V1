@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Message, Attachment } from '../types';
 import { CHECK_IN_PROMPT } from '../constants';
-import { sendMessageToAI, generateImageFromAI, generateVideoFromAI } from '../services/geminiService';
+import { sendMessageToAI, generateImageFromAI, generateVideoFromAI, generateAudioFromAI } from '../services/geminiService';
+import * as hfService from '../services/huggingFaceService';
 import ChatMessage from './ChatMessage';
 import { SendIcon } from './icons/SendIcon';
 import { CameraIcon } from './icons/CameraIcon';
@@ -88,6 +89,80 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ initialInput, onInitialIn
         reader.onerror = error => reject(error);
     });
   };
+  
+  const handleHuggingFaceCommand = async (commandString: string) => {
+    const aiResponseId = (Date.now() + 1).toString();
+    
+    const parts = commandString.split('|').map(p => p.trim());
+    const commandPart = parts[0];
+    const params: Record<string, string> = {};
+    parts.slice(1).forEach(part => {
+        const [key, ...valueParts] = part.split(':');
+        if (key && valueParts.length > 0) {
+            params[key.trim()] = valueParts.join(':').trim();
+        }
+    });
+
+    let type: any;
+    let promise: Promise<any>;
+    let query = {};
+    let text = `Accessing Hugging Face Hub, Captain...`;
+
+    try {
+        if (commandPart === 'HF Model Query') {
+            type = 'modelQuery';
+            query = { model: params.model, prompt: params.prompt };
+            if (!params.model || !params.prompt) throw new Error("Missing 'model' or 'prompt' parameter for Model Query.");
+            text = `Querying model: \`${params.model}\`...`;
+            promise = hfService.queryModel(params.model, params.prompt);
+        } else if (commandPart === 'HF LLM Search') {
+            type = 'modelSearch';
+            query = { query: params.query };
+             if (!params.query) throw new Error("Missing 'query' parameter for LLM Search.");
+            text = `Searching for models matching: \`${params.query}\`...`;
+            promise = hfService.searchModels(params.query);
+        } else if (commandPart === 'HF Space Explorer') {
+            type = 'spaceInfo';
+            query = { space: params.space };
+             if (!params.space) throw new Error("Missing 'space' parameter for Space Explorer.");
+            text = `Exploring Space: \`${params.space}\`...`;
+            promise = hfService.getSpaceInfo(params.space);
+        } else {
+            throw new Error('Unknown Hugging Face command.');
+        }
+
+        setMessages(prev => [...prev, { id: aiResponseId, text, sender: 'ai' }]);
+
+        const result = await promise;
+        
+        setMessages(prev => prev.map(m => m.id === aiResponseId ? {
+             ...m,
+             text: `Hugging Face operation complete, Captain.`,
+             huggingFaceData: { type, query, result }
+        } : m));
+
+    } catch (error: any) {
+        console.error('Hugging Face command failed:', error);
+        const errorMessage = error.message || 'An unknown error occurred.';
+        setMessages(prev => {
+            const existingMsg = prev.find(m => m.id === aiResponseId);
+            if (existingMsg) {
+                return prev.map(m => m.id === aiResponseId ? {
+                     ...m,
+                     text: `Hugging Face operation failed, Captain.`,
+                     huggingFaceData: { type, query, result: null, error: errorMessage }
+                } : m);
+            }
+            // If the loading message wasn't even set, add a new error message
+            return [...prev, {
+                id: aiResponseId,
+                sender: 'ai',
+                text: `Hugging Face operation failed, Captain.`,
+                huggingFaceData: { type, query, result: null, error: errorMessage }
+            }];
+        });
+    }
+  };
 
   const handleSend = useCallback(async () => {
     const userMessageText = input;
@@ -112,9 +187,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ initialInput, onInitialIn
 
     const imagePromptPrefix = "Generate an image of: ";
     const videoPromptPrefix = "Generate a video of: ";
+    const audioPromptPrefix = "Generate music of: ";
+    const hfPrefix = "HF ";
 
     try {
-      if (userMessageText.startsWith(imagePromptPrefix)) {
+      if (userMessageText.startsWith(hfPrefix)) {
+          await handleHuggingFaceCommand(userMessageText);
+      } else if (userMessageText.startsWith(imagePromptPrefix)) {
           const prompt = userMessageText.substring(imagePromptPrefix.length);
           const aiResponseId = (Date.now() + 1).toString();
           setMessages(prev => [...prev, { id: aiResponseId, text: "Forging image...", sender: 'ai', media: { type: 'image', prompt, status: 'generating', url: '' } }]);
@@ -127,6 +206,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ initialInput, onInitialIn
           setMessages(prev => [...prev, { id: aiResponseId, text: "Synthesizing video...", sender: 'ai', media: { type: 'video', prompt, status: 'generating', url: '' } }]);
           const videoUrl = await generateVideoFromAI(prompt);
           setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "Video synthesis complete, Captain.", media: { type: 'video', prompt, status: 'complete', url: videoUrl } } : m));
+
+      } else if (userMessageText.startsWith(audioPromptPrefix)) {
+          const prompt = userMessageText.substring(audioPromptPrefix.length);
+          const aiResponseId = (Date.now() + 1).toString();
+          setMessages(prev => [...prev, { id: aiResponseId, text: "Synthesizing audio...", sender: 'ai', media: { type: 'audio', prompt, status: 'generating', url: '' } }]);
+          const audioUrl = await generateAudioFromAI(prompt);
+          setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "Sonic synthesis complete, Captain.", media: { type: 'audio', prompt, status: 'complete', url: audioUrl } } : m));
 
       } else {
         const parts: any[] = [];
@@ -173,8 +259,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ initialInput, onInitialIn
       // Check if the last message was a generating message and update it, otherwise add a new error message.
       setMessages(prev => {
         const lastMsg = prev[prev.length - 1];
-        if (lastMsg.sender === 'ai' && lastMsg.media?.status === 'generating') {
-            return prev.map(m => m.id === lastMsg.id ? { ...m, text: "Generation failed, Captain.", media: { ...m.media!, status: 'error' } } : m);
+        if (lastMsg.sender === 'ai' && (lastMsg.media?.status === 'generating' || lastMsg.huggingFaceData)) {
+             if (lastMsg.media) {
+                return prev.map(m => m.id === lastMsg.id ? { ...m, text: "Generation failed, Captain.", media: { ...m.media!, status: 'error' } } : m);
+             }
+             if (lastMsg.huggingFaceData) {
+                 return prev.map(m => m.id === lastMsg.id ? { ...m, text: `Hugging Face operation failed.`, huggingFaceData: { ...m.huggingFaceData!, error: (error as Error).message } } : m)
+             }
         }
         return [...prev, errorMessage];
       });
@@ -192,8 +283,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ initialInput, onInitialIn
 
   const handleVision = () => {
     setInput("[Visual Cortex Activated] Analyze the current state of the application's interface and report your findings, co-pilot.");
-    // Can't directly call handleSend here due to state update batching, but this is a simple way to queue it up.
-    // A better way would be to use a useEffect that triggers on a command state change.
     setTimeout(() => handleSend(), 0); 
   };
 

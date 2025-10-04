@@ -19,6 +19,13 @@ export const SUPER_POWERS = [
 export const CREATIVE_POWERS = [
     { name: "Image Forge", emoji: "🎨", color: "#A020F0", font: "font-sans", description: "Generates an image from a text prompt.", prompt: "Generate an image of: " },
     { name: "Video Synthesis", emoji: "🎥", color: "#FFA500", font: "font-mono", description: "Generates a video from a text prompt. This may take several minutes.", prompt: "Generate a video of: " },
+    { name: "Sonic Synthesis", emoji: "🎵", color: "#1DB954", font: "font-sans", description: "Generates a musical track from a text prompt.", prompt: "Generate music of: " },
+];
+
+export const HUGGING_FACE_POWERS = [
+    { name: "Model Query", emoji: "🤗", color: "#FFD700", font: "font-mono", description: "Query any model on the Hugging Face Inference API.", prompt: "HF Model Query | model: [model_id] | prompt: [your_prompt]" },
+    { name: "LLM Search", emoji: "🔍", color: "#FFD700", font: "font-mono", description: "Search for models on the Hugging Face Hub.", prompt: "HF LLM Search | query: [search_term]" },
+    { name: "Space Explorer", emoji: "🚀", color: "#FFD700", font: "font-mono", description: "Get information about a Hugging Face Space.", prompt: "HF Space Explorer | space: [space_id]" },
 ];
 
 

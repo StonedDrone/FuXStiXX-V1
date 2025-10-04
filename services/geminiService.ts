@@ -84,6 +84,23 @@ export const generateVideoFromAI = async (prompt: string): Promise<string> => {
     return `${downloadLink}&key=${API_KEY}`;
 }
 
+export const generateAudioFromAI = async (prompt: string): Promise<string> => {
+    console.log("Simulating audio generation for prompt:", prompt);
+    // Simulate network delay and generation time
+    await new Promise(resolve => setTimeout(resolve, 8000));
+    
+    // In a real scenario, this would call a text-to-music API.
+    // For now, we return a pre-canned track to demonstrate the UI flow.
+    const mockAudioUrl = 'https://cdn.pixabay.com/audio/2023/08/01/audio_a1458f3889.mp3';
+    
+    // Randomly simulate a failure to show error handling
+    if (prompt.toLowerCase().includes("error")) {
+         throw new Error("Simulated audio generation failure.");
+    }
+
+    return mockAudioUrl;
+}
+
 
 // Function to reset the chat if needed, e.g., for a "new chat" button.
 export const resetChat = () => {

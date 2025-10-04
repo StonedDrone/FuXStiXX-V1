@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Track } from '../types';
 import { MOCK_PLAYLIST } from '../constants';
+import { useUIState } from '../contexts/UIStateContext';
 import { XIcon } from './icons/XIcon';
 import PlaybackControls from './PlaybackControls';
+import Visualizer from './Visualizer';
 
 interface PlaylistProps {
     isOpen: boolean;
@@ -27,7 +29,13 @@ const Playlist: React.FC<PlaylistProps> = ({ isOpen, onClose }) => {
     const [playlist, setPlaylist] = useState<Track[]>([]);
     const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
+    const [themeColor, setThemeColor] = useState('#32CD32');
+    const { theme } = useUIState();
+
     const audioRef = useRef<HTMLAudioElement>(null);
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const analyserRef = useRef<AnalyserNode | null>(null);
+    const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
 
     useEffect(() => {
         try {
@@ -40,19 +48,48 @@ const Playlist: React.FC<PlaylistProps> = ({ isOpen, onClose }) => {
         }
     }, []);
 
+    useEffect(() => {
+        if (isOpen) {
+            const color = getComputedStyle(document.documentElement).getPropertyValue('--color-primary').trim();
+            setThemeColor(color || '#32CD32');
+        }
+    }, [theme, isOpen]);
+
     const savePlaylist = (updatedPlaylist: Track[]) => {
         setPlaylist(updatedPlaylist);
         localStorage.setItem('fuxstixx-playlist', JSON.stringify(updatedPlaylist));
     };
 
     const handleImportPlaylist = () => {
-        // In a real app, this would involve Spotify OAuth and API calls.
-        // Here, we just load the mock data.
         savePlaylist(MOCK_PLAYLIST);
         alert("Mission Jams playlist has been loaded, Captain. This is a simulation of a Spotify data import.");
     };
 
+    const setupAudioContext = () => {
+        if (!audioRef.current || audioContextRef.current) return;
+
+        const context = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const analyser = context.createAnalyser();
+        analyser.fftSize = 256;
+        
+        // Ensure the source is created only once
+        if (!sourceRef.current) {
+            const source = context.createMediaElementSource(audioRef.current);
+            source.connect(analyser);
+            analyser.connect(context.destination);
+            sourceRef.current = source;
+        }
+
+        audioContextRef.current = context;
+        analyserRef.current = analyser;
+    };
+
     const handlePlayTrack = (track: Track) => {
+        setupAudioContext();
+        if (audioContextRef.current?.state === 'suspended') {
+            audioContextRef.current.resume();
+        }
+
         if (currentTrack?.id === track.id) {
             if (isPlaying) {
                 audioRef.current?.pause();
@@ -89,8 +126,16 @@ const Playlist: React.FC<PlaylistProps> = ({ isOpen, onClose }) => {
     useEffect(() => {
         if (audioRef.current && currentTrack) {
             audioRef.current.src = currentTrack.audioSrc;
-            audioRef.current.play().catch(e => console.error("Audio playback failed:", e));
+            audioRef.current.crossOrigin = "anonymous"; // Required for audio context with remote sources
+            audioRef.current.play().then(() => {
+                setIsPlaying(true);
+            }).catch(e => {
+                console.error("Audio playback failed:", e);
+                setIsPlaying(false);
+            });
             audioRef.current.onended = handleNext;
+            audioRef.current.onpause = () => setIsPlaying(false);
+            audioRef.current.onplay = () => setIsPlaying(true);
         }
     }, [currentTrack]);
     
@@ -100,11 +145,11 @@ const Playlist: React.FC<PlaylistProps> = ({ isOpen, onClose }) => {
             className={`w-full text-left p-3 flex items-center space-x-4 rounded-lg transition-all duration-200 ${currentTrack?.id === track.id ? 'bg-primary/20' : 'hover:bg-layer-2'}`}
         >
             <img src={track.albumArtUrl} alt={track.title} className="w-12 h-12 rounded-md object-cover" />
-            <div className="flex-1">
-                <p className={`font-semibold ${currentTrack?.id === track.id ? 'text-primary' : 'text-secondary'}`}>{track.title}</p>
-                <p className="text-sm text-gray-400">{track.artist}</p>
+            <div className="flex-1 overflow-hidden">
+                <p className={`font-semibold truncate ${currentTrack?.id === track.id ? 'text-primary' : 'text-secondary'}`}>{track.title}</p>
+                <p className="text-sm text-gray-400 truncate">{track.artist}</p>
             </div>
-            <div className="text-right text-sm text-gray-400 font-mono">
+            <div className="text-right text-sm text-gray-400 font-mono flex-shrink-0">
                 <p>Plays: {track.playCount}</p>
                 <p>{track.lastPlayed ? formatRelativeTime(track.lastPlayed) : 'Never'}</p>
             </div>
@@ -142,7 +187,8 @@ const Playlist: React.FC<PlaylistProps> = ({ isOpen, onClose }) => {
                    )}
                 </div>
                 {currentTrack && (
-                    <div className="flex-shrink-0">
+                    <div className="flex-shrink-0 border-t border-layer-3">
+                         <Visualizer analyser={analyserRef.current} isPlaying={isPlaying} themeColor={themeColor} />
                          <PlaybackControls
                             track={currentTrack}
                             isPlaying={isPlaying}

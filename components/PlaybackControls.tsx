@@ -21,16 +21,16 @@ const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   onPrev,
 }) => {
   return (
-    <div className="bg-layer-2 p-4 border-t border-layer-3 flex items-center justify-between">
-      <div className="flex items-center space-x-4">
+    <div className="bg-layer-2 p-4 flex items-center justify-between">
+      <div className="flex items-center space-x-4 min-w-0">
         <img
           src={track.albumArtUrl}
           alt={track.title}
-          className="w-14 h-14 rounded-md object-cover"
+          className="w-14 h-14 rounded-md object-cover flex-shrink-0"
         />
-        <div>
-          <p className="font-semibold text-primary">{track.title}</p>
-          <p className="text-sm text-gray-400">{track.artist}</p>
+        <div className="overflow-hidden">
+          <p className="font-semibold text-primary truncate">{track.title}</p>
+          <p className="text-sm text-gray-400 truncate">{track.artist}</p>
         </div>
       </div>
       <div className="flex items-center space-x-4">

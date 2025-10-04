@@ -1,10 +1,10 @@
-
 import React, { useEffect, useRef } from 'react';
 import { Message, Sender } from '../types';
 import { BotIcon } from './icons/BotIcon';
 import { UserIcon } from './icons/UserIcon';
 import { AttachmentIcon } from './icons/AttachmentIcons';
 import { LoaderIcon } from './icons/LoaderIcon';
+import HuggingFaceResult from './HuggingFaceResult';
 
 interface ChatMessageProps {
   message: Message;
@@ -76,7 +76,9 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
                             <LoaderIcon />
                             <span className="text-sm">
                                 {message.media.type === 'video' 
-                                    ? "Synthesizing video... this may take a few minutes, Captain." 
+                                    ? "Synthesizing video... this may take a few minutes, Captain."
+                                    : message.media.type === 'audio'
+                                    ? "Synthesizing audio track..."
                                     : "Generating image..."}
                             </span>
                         </div>
@@ -87,11 +89,17 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
                     {message.media.status === 'complete' && message.media.type === 'video' && (
                         <video src={message.media.url} controls className="rounded-lg max-w-full sm:max-w-sm border-2 border-layer-3" />
                     )}
+                    {message.media.status === 'complete' && message.media.type === 'audio' && (
+                        <audio src={message.media.url} controls className="w-full sm:max-w-sm" />
+                    )}
                     {message.media.status === 'error' && (
                         <p className="text-sm text-danger font-mono">Generation failed, Captain.</p>
                     )}
                 </div>
             </div>
+        )}
+        {message.huggingFaceData && (
+            <HuggingFaceResult data={message.huggingFaceData} />
         )}
       </div>
     </div>

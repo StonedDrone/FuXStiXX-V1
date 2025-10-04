@@ -8,6 +8,7 @@ import { CameraIcon } from './icons/CameraIcon';
 import { PaperclipIcon } from './icons/PaperclipIcon';
 import { XIcon } from './icons/XIcon';
 import { AttachmentIcon } from './icons/AttachmentIcons';
+import { useUIState, Theme } from '../contexts/UIStateContext';
 
 const ChatInterface: React.FC = () => {
   const initialMessage: Message = {
@@ -38,6 +39,7 @@ const ChatInterface: React.FC = () => {
   const [attachments, setAttachments] = useState<File[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const { setTheme } = useUIState();
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -90,7 +92,7 @@ const ChatInterface: React.FC = () => {
       attachments: messageAttachments,
     };
     
-    const historyForApi = [...messages, userMessage];
+    const historyForApi = [...messages];
 
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
@@ -137,6 +139,32 @@ const ChatInterface: React.FC = () => {
           )
         );
       }
+
+      const commandRegex = /\[FUX_STATE:(.*?)\]$/;
+      const match = fullResponse.match(commandRegex);
+      let messageToDisplay = fullResponse;
+
+      if (match && match[1]) {
+        try {
+          const command = JSON.parse(match[1]);
+          if (command.theme) {
+            const validThemes: Theme[] = ['normal', 'analyzing', 'chaos', 'stealth', 'overdrive'];
+            if (validThemes.includes(command.theme)) {
+              setTheme(command.theme);
+            }
+          }
+        } catch (e) {
+          console.error("Failed to parse FUX_STATE command:", e);
+        }
+        messageToDisplay = fullResponse.replace(commandRegex, '').trim();
+      }
+
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === aiResponseId ? { ...msg, text: messageToDisplay } : msg
+        )
+      );
+
     } catch (error) {
       console.error('Error sending message to AI:', error);
        setMessages((prev) =>
@@ -147,7 +175,7 @@ const ChatInterface: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [input, isLoading, attachments, messages, isOnline]);
+  }, [input, isLoading, attachments, messages, isOnline, setTheme]);
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {

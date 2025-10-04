@@ -12,20 +12,38 @@
         theme: {
           extend: {
             colors: {
-              'base': '#000000',
-              'layer-1': '#111111',
-              'layer-2': '#222222',
-              'layer-3': '#333333',
-              'primary': '#32CD32',
-              'secondary': '#C0C0C0',
-              'accent': '#32CD32',
-              'success': '#2ea043',
-              'danger': '#f85149',
+              'base': 'var(--color-base)',
+              'layer-1': 'var(--color-layer-1)',
+              'layer-2': 'var(--color-layer-2)',
+              'layer-3': 'var(--color-layer-3)',
+              'primary': 'var(--color-primary)',
+              'secondary': 'var(--color-secondary)',
+              'accent': 'var(--color-accent)',
+              'success': 'var(--color-success)',
+              'danger': 'var(--color-danger)',
             },
             fontFamily: {
               sans: ['"Inter"', 'sans-serif'],
               mono: ['"Fira Code"', 'monospace'],
             },
+            keyframes: {
+              pulse: {
+                '0%, 100%': { 'box-shadow': '0 0 8px var(--color-primary)' },
+                '50%': { 'box-shadow': '0 0 16px var(--color-primary)' },
+              },
+              glitch: {
+                '0%': { transform: 'translate(0)' },
+                '20%': { transform: 'translate(-2px, 2px)' },
+                '40%': { transform: 'translate(-2px, -2px)' },
+                '60%': { transform: 'translate(2px, 2px)' },
+                '80%': { transform: 'translate(2px, -2px)' },
+                '100%': { transform: 'translate(0)' },
+              }
+            },
+            animation: {
+              pulse: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              glitch: 'glitch 0.2s linear infinite',
+            }
           },
         },
       }
@@ -34,16 +52,73 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style type="text/css">
+      :root, [data-theme='normal'] {
+        --color-base: #000000;
+        --color-layer-1: #111111;
+        --color-layer-2: #222222;
+        --color-layer-3: #333333;
+        --color-primary: #32CD32;
+        --color-secondary: #C0C0C0;
+        --color-accent: #32CD32;
+        --color-success: #2ea043;
+        --color-danger: #f85149;
+      }
+      [data-theme='analyzing'] {
+        --color-base: #020A1A;
+        --color-layer-1: #0A1428;
+        --color-layer-2: #14213D;
+        --color-layer-3: #223354;
+        --color-primary: #00BFFF;
+        --color-secondary: #E0E0E0;
+        --color-accent: #00BFFF;
+      }
+      [data-theme='chaos'] {
+        --color-base: #1A0000;
+        --color-layer-1: #2B0000;
+        --color-layer-2: #4D0000;
+        --color-layer-3: #6F0000;
+        --color-primary: #FF4500;
+        --color-secondary: #FFC0CB;
+        --color-accent: #FF4500;
+      }
+      [data-theme='stealth'] {
+        --color-base: #0D021A;
+        --color-layer-1: #190A28;
+        --color-layer-2: #2E143D;
+        --color-layer-3: #4A2254;
+        --color-primary: #9400D3;
+        --color-secondary: #D8BFD8;
+        --color-accent: #9400D3;
+      }
+      [data-theme='overdrive'] {
+        --color-base: #111111;
+        --color-layer-1: #222222;
+        --color-layer-2: #333333;
+        --color-layer-3: #444444;
+        --color-primary: #FFFF00;
+        --color-secondary: #FFFFFF;
+        --color-accent: #FFFF00;
+      }
+
       body {
         padding: 4px;
+        background-color: var(--color-base);
+        transition: background-color 0.5s ease;
       }
       #root {
-        border: 2px solid #32CD32;
-        box-shadow: 0 0 8px #32CD32;
+        border: 2px solid var(--color-primary);
+        box-shadow: 0 0 8px var(--color-primary);
         height: calc(100vh - 8px);
         width: calc(100vw - 8px);
         border-radius: 6px;
         overflow: hidden;
+        transition: border-color 0.5s ease, box-shadow 0.5s ease;
+      }
+      [data-theme='analyzing'] #root {
+        animation: pulse 2.5s infinite;
+      }
+      [data-theme='chaos'] body {
+         animation: glitch 0.1s linear infinite alternate;
       }
       /* Custom scrollbar for a more integrated look */
       ::-webkit-scrollbar {
@@ -51,15 +126,15 @@
         height: 8px;
       }
       ::-webkit-scrollbar-track {
-        background: #111111;
+        background: var(--color-layer-1);
       }
       ::-webkit-scrollbar-thumb {
-        background-color: #333333;
+        background-color: var(--color-layer-3);
         border-radius: 4px;
-        border: 2px solid #111111;
+        border: 2px solid var(--color-layer-1);
       }
       ::-webkit-scrollbar-thumb:hover {
-        background-color: #32CD32;
+        background-color: var(--color-primary);
       }
     </style>
   <script type="importmap">

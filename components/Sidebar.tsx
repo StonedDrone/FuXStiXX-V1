@@ -1,8 +1,10 @@
+
 import React, { useState } from 'react';
 import { POWERS, SUPER_POWERS } from '../constants';
 
 const Sidebar: React.FC = () => {
-  const PowerListItem = ({ power }: { power: typeof POWERS[0]}) => {
+  // FIX: Explicitly type the inline component with React.FC to correctly handle the 'key' prop.
+  const PowerListItem: React.FC<{ power: typeof POWERS[0]}> = ({ power }) => {
     const [isHovered, setIsHovered] = useState(false);
 
     return (

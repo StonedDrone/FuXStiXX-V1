@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { POWERS, SUPER_POWERS } from '../constants';
 import { XIcon } from './icons/XIcon';
@@ -9,7 +10,8 @@ interface CodexProps {
 
 const Codex: React.FC<CodexProps> = ({ isOpen, onClose }) => {
     
-    const PowerEntry = ({ power }: { power: typeof POWERS[0]}) => (
+    // FIX: Explicitly type the inline component with React.FC to correctly handle the 'key' prop.
+    const PowerEntry: React.FC<{ power: typeof POWERS[0]}> = ({ power }) => (
         <div 
             className="mb-4 border-b-2 pb-2 transition-all duration-300"
             style={{ borderColor: `${power.color}80` }} // Using 50% opacity for the border

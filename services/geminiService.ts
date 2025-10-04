@@ -46,6 +46,45 @@ export const sendMessageToAI = async (history: Message[], currentUserMessagePart
   return result;
 };
 
+export const generateImageFromAI = async (prompt: string): Promise<string> => {
+    const response = await ai.models.generateImages({
+        model: 'imagen-4.0-generate-001',
+        prompt: prompt,
+        config: {
+          numberOfImages: 1,
+          outputMimeType: 'image/png',
+          aspectRatio: '1:1',
+        },
+    });
+
+    const base64ImageBytes: string = response.generatedImages[0].image.imageBytes;
+    return `data:image/png;base64,${base64ImageBytes}`;
+}
+
+export const generateVideoFromAI = async (prompt: string): Promise<string> => {
+    let operation = await ai.models.generateVideos({
+        model: 'veo-2.0-generate-001',
+        prompt: prompt,
+        config: {
+            numberOfVideos: 1
+        }
+    });
+
+    while (!operation.done) {
+        // Wait for 10 seconds before polling again
+        await new Promise(resolve => setTimeout(resolve, 10000));
+        operation = await ai.operations.getVideosOperation({operation: operation});
+    }
+
+    const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
+    if (!downloadLink) {
+        throw new Error("Video generation failed or returned no link.");
+    }
+    // The link needs the API key appended to be used as a src
+    return `${downloadLink}&key=${API_KEY}`;
+}
+
+
 // Function to reset the chat if needed, e.g., for a "new chat" button.
 export const resetChat = () => {
     chat = null;

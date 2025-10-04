@@ -1,4 +1,3 @@
-
 export type Sender = 'user' | 'ai';
 
 export interface Attachment {
@@ -11,4 +10,20 @@ export interface Message {
   text: string;
   sender: Sender;
   attachments?: Attachment[];
+  media?: {
+    type: 'image' | 'video';
+    url: string;
+    prompt: string;
+    status?: 'generating' | 'complete' | 'error';
+  };
+}
+
+export interface Track {
+  id: string;
+  title: string;
+  artist: string;
+  albumArtUrl: string;
+  audioSrc: string;
+  playCount: number;
+  lastPlayed: string | null;
 }

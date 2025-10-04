@@ -1,15 +1,20 @@
-
 import React, { useState } from 'react';
-import { POWERS, SUPER_POWERS } from '../constants';
+import { POWERS, SUPER_POWERS, CREATIVE_POWERS } from '../constants';
 
-const Sidebar: React.FC = () => {
-  // FIX: Explicitly type the inline component with React.FC to correctly handle the 'key' prop.
-  const PowerListItem: React.FC<{ power: typeof POWERS[0]}> = ({ power }) => {
+interface SidebarProps {
+  onPowerClick: (prompt: string) => void;
+}
+
+type Power = typeof POWERS[0];
+
+const Sidebar: React.FC<SidebarProps> = ({ onPowerClick }) => {
+  const PowerListItem: React.FC<{ power: Power; onClick: () => void }> = ({ power, onClick }) => {
     const [isHovered, setIsHovered] = useState(false);
 
     return (
-        <li 
-            className="flex items-start p-1 rounded-md transition-all duration-200 cursor-pointer" 
+        <button
+            onClick={onClick}
+            className="w-full text-left flex items-start p-1 rounded-md transition-all duration-200"
             title={power.description}
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
@@ -27,7 +32,7 @@ const Sidebar: React.FC = () => {
             >
               {power.name}
             </span>
-        </li>
+        </button>
     );
   };
 
@@ -35,19 +40,27 @@ const Sidebar: React.FC = () => {
     <aside className="w-80 bg-layer-1 border-r border-layer-3 flex flex-col p-4 overflow-y-auto">
       <div className="flex-shrink-0">
         <h2 className="text-lg font-semibold text-gray-200 mb-4 font-mono">Powers</h2>
-        <ul className="space-y-3 text-sm">
+        <div className="space-y-3 text-sm">
           {POWERS.map(power => (
-            <PowerListItem key={power.name} power={power} />
+            <PowerListItem key={power.name} power={power} onClick={() => onPowerClick(power.prompt)} />
           ))}
-        </ul>
+        </div>
       </div>
        <div className="mt-8 flex-shrink-0">
         <h2 className="text-lg font-semibold text-gray-200 mb-4 font-mono">Super Powers</h2>
-        <ul className="space-y-3 text-sm">
+        <div className="space-y-3 text-sm">
           {SUPER_POWERS.map(power => (
-            <PowerListItem key={power.name} power={power} />
+            <PowerListItem key={power.name} power={power} onClick={() => onPowerClick(power.prompt)} />
           ))}
-        </ul>
+        </div>
+      </div>
+      <div className="mt-8 flex-shrink-0">
+        <h2 className="text-lg font-semibold text-gray-200 mb-4 font-mono">Creative Powers</h2>
+        <div className="space-y-3 text-sm">
+          {CREATIVE_POWERS.map(power => (
+            <PowerListItem key={power.name} power={power} onClick={() => onPowerClick(power.prompt)} />
+          ))}
+        </div>
       </div>
     </aside>
   );

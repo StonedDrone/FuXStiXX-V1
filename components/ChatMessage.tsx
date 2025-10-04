@@ -4,6 +4,7 @@ import { Message, Sender } from '../types';
 import { BotIcon } from './icons/BotIcon';
 import { UserIcon } from './icons/UserIcon';
 import { AttachmentIcon } from './icons/AttachmentIcons';
+import { LoaderIcon } from './icons/LoaderIcon';
 
 interface ChatMessageProps {
   message: Message;
@@ -16,14 +17,8 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
   useEffect(() => {
     if (contentRef.current && (window as any).marked) {
       const dirtyHtml = (window as any).marked.parse(message.text || '', { gfm: true, breaks: true, async: false });
-       // Basic sanitization for safety
       const sanitizedHtml = dirtyHtml.replace(/<script.*?>.*?<\/script>/gi, '');
       contentRef.current.innerHTML = sanitizedHtml;
-
-      contentRef.current.querySelectorAll('pre code').forEach((block) => {
-        // Here you could add a syntax highlighter library if one was available via CDN
-        // For now, we'll rely on the prose styles
-      });
     }
   }, [message.text]);
 
@@ -68,6 +63,34 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
                         <span className="ml-1.5">{att.name}</span>
                     </div>
                 ))}
+            </div>
+        )}
+        {message.media && (
+            <div className="mt-2">
+                <blockquote className={`border-l-4 pl-3 italic text-sm ${isAI ? 'border-layer-3 text-secondary' : 'border-lime-500 text-gray-800'}`}>
+                    {message.media.prompt}
+                </blockquote>
+                <div className="mt-3">
+                    {message.media.status === 'generating' && (
+                        <div className="flex items-center space-x-2 text-secondary animate-pulse">
+                            <LoaderIcon />
+                            <span className="text-sm">
+                                {message.media.type === 'video' 
+                                    ? "Synthesizing video... this may take a few minutes, Captain." 
+                                    : "Generating image..."}
+                            </span>
+                        </div>
+                    )}
+                    {message.media.status === 'complete' && message.media.type === 'image' && (
+                        <img src={message.media.url} alt={message.media.prompt} className="rounded-lg max-w-full sm:max-w-sm border-2 border-layer-3" />
+                    )}
+                    {message.media.status === 'complete' && message.media.type === 'video' && (
+                        <video src={message.media.url} controls className="rounded-lg max-w-full sm:max-w-sm border-2 border-layer-3" />
+                    )}
+                    {message.media.status === 'error' && (
+                        <p className="text-sm text-danger font-mono">Generation failed, Captain.</p>
+                    )}
+                </div>
             </div>
         )}
       </div>

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Message, Attachment } from '../types';
 import { CHECK_IN_PROMPT } from '../constants';
-import { sendMessageToAI } from '../services/geminiService';
+import { sendMessageToAI, generateImageFromAI, generateVideoFromAI } from '../services/geminiService';
 import ChatMessage from './ChatMessage';
 import { SendIcon } from './icons/SendIcon';
 import { CameraIcon } from './icons/CameraIcon';
@@ -10,7 +10,12 @@ import { XIcon } from './icons/XIcon';
 import { AttachmentIcon } from './icons/AttachmentIcons';
 import { useUIState, Theme } from '../contexts/UIStateContext';
 
-const ChatInterface: React.FC = () => {
+interface ChatInterfaceProps {
+  initialInput: string | null;
+  onInitialInputUsed: () => void;
+}
+
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ initialInput, onInitialInputUsed }) => {
   const initialMessage: Message = {
       id: 'init',
       text: 'FuXStiXX online. I am your co-pilot, Captain. Ready to progress the Mission. How may I assist?',
@@ -22,7 +27,6 @@ const ChatInterface: React.FC = () => {
         const savedMessages = localStorage.getItem('fuxstixx-chat-history');
         if (savedMessages) {
           const parsed = JSON.parse(savedMessages);
-          // Don't load an empty history
           if (Array.isArray(parsed) && parsed.length > 0) {
             return parsed;
           }
@@ -42,6 +46,7 @@ const ChatInterface: React.FC = () => {
   const { setTheme } = useUIState();
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textAreaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -63,6 +68,14 @@ const ChatInterface: React.FC = () => {
       window.removeEventListener('offline', goOffline);
     };
   }, []);
+  
+  useEffect(() => {
+    if (initialInput) {
+        setInput(initialInput);
+        textAreaRef.current?.focus();
+        onInitialInputUsed();
+    }
+  }, [initialInput, onInitialInputUsed]);
 
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -76,8 +89,8 @@ const ChatInterface: React.FC = () => {
     });
   };
 
-  const handleSend = useCallback(async (prompt?: string) => {
-    const userMessageText = prompt || input;
+  const handleSend = useCallback(async () => {
+    const userMessageText = input;
     if ((!userMessageText.trim() && attachments.length === 0) || isLoading || !isOnline) return;
 
     const messageAttachments: Attachment[] = attachments.map(file => ({
@@ -92,86 +105,79 @@ const ChatInterface: React.FC = () => {
       attachments: messageAttachments,
     };
     
-    const historyForApi = [...messages];
-
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
-    const attachmentsToSend = [...attachments];
-    setAttachments([]); // Clear attachments from UI immediately
+    setAttachments([]);
     setIsLoading(true);
 
-    const aiResponseId = (Date.now() + 1).toString();
-    const aiMessage: Message = {
-      id: aiResponseId,
-      text: '',
-      sender: 'ai',
-    };
-    setMessages((prev) => [...prev, aiMessage]);
+    const imagePromptPrefix = "Generate an image of: ";
+    const videoPromptPrefix = "Generate a video of: ";
 
     try {
-      const parts: any[] = [];
-      if (userMessageText.trim()) {
-          parts.push({ text: userMessageText.trim() });
-      }
+      if (userMessageText.startsWith(imagePromptPrefix)) {
+          const prompt = userMessageText.substring(imagePromptPrefix.length);
+          const aiResponseId = (Date.now() + 1).toString();
+          setMessages(prev => [...prev, { id: aiResponseId, text: "Forging image...", sender: 'ai', media: { type: 'image', prompt, status: 'generating', url: '' } }]);
+          const imageUrl = await generateImageFromAI(prompt);
+          setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "Image generation complete, Captain.", media: { type: 'image', prompt, status: 'complete', url: imageUrl } } : m));
 
-      if (attachmentsToSend.length > 0) {
-          const fileParts = await Promise.all(
-              attachmentsToSend.map(async (file) => {
-                  const base64Data = await fileToBase64(file);
-                  return {
-                      inlineData: {
-                          mimeType: file.type || 'application/octet-stream',
-                          data: base64Data,
-                      },
-                  };
-              })
-          );
-          parts.push(...fileParts);
-      }
+      } else if (userMessageText.startsWith(videoPromptPrefix)) {
+          const prompt = userMessageText.substring(videoPromptPrefix.length);
+          const aiResponseId = (Date.now() + 1).toString();
+          setMessages(prev => [...prev, { id: aiResponseId, text: "Synthesizing video...", sender: 'ai', media: { type: 'video', prompt, status: 'generating', url: '' } }]);
+          const videoUrl = await generateVideoFromAI(prompt);
+          setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "Video synthesis complete, Captain.", media: { type: 'video', prompt, status: 'complete', url: videoUrl } } : m));
 
-      const stream = await sendMessageToAI(historyForApi, parts);
-      let fullResponse = '';
-      for await (const chunk of stream) {
-        fullResponse += chunk.text;
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === aiResponseId ? { ...msg, text: fullResponse } : msg
-          )
-        );
-      }
-
-      const commandRegex = /\[FUX_STATE:(.*?)\]$/;
-      const match = fullResponse.match(commandRegex);
-      let messageToDisplay = fullResponse;
-
-      if (match && match[1]) {
-        try {
-          const command = JSON.parse(match[1]);
-          if (command.theme) {
-            const validThemes: Theme[] = ['normal', 'analyzing', 'chaos', 'stealth', 'overdrive'];
-            if (validThemes.includes(command.theme)) {
-              setTheme(command.theme);
-            }
-          }
-        } catch (e) {
-          console.error("Failed to parse FUX_STATE command:", e);
+      } else {
+        const parts: any[] = [];
+        if (userMessageText.trim()) {
+            parts.push({ text: userMessageText.trim() });
         }
-        messageToDisplay = fullResponse.replace(commandRegex, '').trim();
+        if (attachments.length > 0) {
+            const fileParts = await Promise.all(
+                attachments.map(async (file) => ({
+                    inlineData: { mimeType: file.type || 'application/octet-stream', data: await fileToBase64(file) }
+                }))
+            );
+            parts.push(...fileParts);
+        }
+
+        const aiResponseId = (Date.now() + 1).toString();
+        setMessages((prev) => [...prev, { id: aiResponseId, text: '', sender: 'ai' }]);
+
+        const stream = await sendMessageToAI([...messages], parts);
+        let fullResponse = '';
+        for await (const chunk of stream) {
+          fullResponse += chunk.text;
+          setMessages((prev) => prev.map((msg) => msg.id === aiResponseId ? { ...msg, text: fullResponse } : msg));
+        }
+
+        const commandRegex = /\[FUX_STATE:(.*?)\]$/;
+        const match = fullResponse.match(commandRegex);
+        let messageToDisplay = fullResponse;
+        if (match && match[1]) {
+          try {
+            const command = JSON.parse(match[1]);
+            if (command.theme && ['normal', 'analyzing', 'chaos', 'stealth', 'overdrive'].includes(command.theme)) {
+              setTheme(command.theme as Theme);
+            }
+          } catch (e) { console.error("Failed to parse FUX_STATE command:", e); }
+          messageToDisplay = fullResponse.replace(commandRegex, '').trim();
+        }
+        setMessages((prev) => prev.map((msg) => msg.id === aiResponseId ? { ...msg, text: messageToDisplay } : msg));
       }
-
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === aiResponseId ? { ...msg, text: messageToDisplay } : msg
-        )
-      );
-
     } catch (error) {
-      console.error('Error sending message to AI:', error);
-       setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === aiResponseId ? { ...msg, text: 'Sorry, I encountered an error. Please check the console, your API key, or network connection.' } : msg
-          )
-        );
+      console.error('Error in handleSend:', error);
+      const errorId = (Date.now() + 1).toString();
+      const errorMessage = { id: errorId, text: 'Sorry, I encountered an error. Please check the console, your API key, or network connection.', sender: 'ai' };
+      // Check if the last message was a generating message and update it, otherwise add a new error message.
+      setMessages(prev => {
+        const lastMsg = prev[prev.length - 1];
+        if (lastMsg.sender === 'ai' && lastMsg.media?.status === 'generating') {
+            return prev.map(m => m.id === lastMsg.id ? { ...m, text: "Generation failed, Captain.", media: { ...m.media!, status: 'error' } } : m);
+        }
+        return [...prev, errorMessage];
+      });
     } finally {
       setIsLoading(false);
     }
@@ -185,7 +191,10 @@ const ChatInterface: React.FC = () => {
   };
 
   const handleVision = () => {
-    handleSend("[Visual Cortex Activated] Analyze the current state of the application's interface and report your findings, co-pilot.");
+    setInput("[Visual Cortex Activated] Analyze the current state of the application's interface and report your findings, co-pilot.");
+    // Can't directly call handleSend here due to state update batching, but this is a simple way to queue it up.
+    // A better way would be to use a useEffect that triggers on a command state change.
+    setTimeout(() => handleSend(), 0); 
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -231,7 +240,7 @@ const ChatInterface: React.FC = () => {
         {messages.length <= 1 && (
             <div className="flex justify-center mb-4">
                 <button
-                    onClick={() => handleSend(CHECK_IN_PROMPT)}
+                    onClick={() => setInput(CHECK_IN_PROMPT)}
                     className="p-3 px-6 bg-layer-1 border border-layer-3 rounded-lg text-center text-sm hover:bg-layer-2 hover:border-primary transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={!isOnline || isLoading}
                 >
@@ -259,6 +268,7 @@ const ChatInterface: React.FC = () => {
         )}
         <div className="relative flex items-center">
           <textarea
+            ref={textAreaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={handleKeyPress}

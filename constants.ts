@@ -2,17 +2,17 @@
 export const CHECK_IN_PROMPT = "What have I done lately with the Mission? Give me a status update based on your analysis.";
 
 export const POWERS = [
-  { name: "System Scan", description: "Scans and indexes the entire codebase." },
-  { name: "Intel Analysis", description: "Analyzes code to infer purpose and dependencies." },
-  { name: "Execute Chaos", description: "Simulates script and function execution." },
-  { name: "Time Warp", description: "Accesses and interprets Git commit history." },
-  { name: "Dependency Web", description: "Understands internal and external dependencies." },
-  { name: "Ghost Code", description: "Generates context-aware code and suggestions." },
+  { name: "System Scan", emoji: "⚙️", color: "#32CD32", font: "font-mono", description: "Scans and indexes the entire codebase." },
+  { name: "Intel Analysis", emoji: "🧠", color: "#00FFFF", font: "font-sans", description: "Analyzes code to infer purpose and dependencies." },
+  { name: "Execute Chaos", emoji: "💥", color: "#FF4500", font: "font-mono", description: "Simulates script and function execution." },
+  { name: "Time Warp", emoji: "⏳", color: "#FFD700", font: "font-sans italic", description: "Accesses and interprets Git commit history." },
+  { name: "Dependency Web", emoji: "🕸️", color: "#FF00FF", font: "font-mono", description: "Understands internal and external dependencies." },
+  { name: "Ghost Code", emoji: "👻", color: "#C0C0C0", font: "font-sans", description: "Generates context-aware code and suggestions." },
 ];
 
 export const SUPER_POWERS = [
-   { name: "Future Sight", description: "Combines Time Warp and Ghost Code to predict future development trajectories." },
-   { name: "System Overhaul", description: "Uses Dependency Web and Intel Analysis to suggest large-scale codebase improvements." },
+   { name: "Future Sight", emoji: "🔮", color: "#FFD700", font: "font-mono font-bold", description: "Combines Time Warp and Ghost Code to predict future development trajectories." },
+   { name: "System Overhaul", emoji: "🚀", color: "#7DF9FF", font: "font-sans font-bold", description: "Uses Dependency Web and Intel Analysis to suggest large-scale codebase improvements." },
 ];
 
 

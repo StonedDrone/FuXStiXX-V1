@@ -27,8 +27,8 @@ const renderResult = (result: any) => {
         return <img src={result} alt="Hugging Face Model Output" className="rounded-lg max-w-full sm:max-w-sm border-2 border-layer-3" />;
     }
     // Check for common text generation output formats
-    if (Array.isArray(result) && result[0]?.generated_text) {
-        return <p className="whitespace-pre-wrap font-mono">{result[0].generated_text}</p>;
+    if (result?.generated_text) {
+        return <p className="whitespace-pre-wrap font-mono">{result.generated_text}</p>;
     }
     // Generic JSON output
     return <pre className="whitespace-pre-wrap text-xs bg-base p-2 rounded-md overflow-x-auto"><code>{JSON.stringify(result, null, 2)}</code></pre>;

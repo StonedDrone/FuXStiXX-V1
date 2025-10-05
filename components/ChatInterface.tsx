@@ -204,7 +204,8 @@ const ChatInterface: React.FC = () => {
     const videoPromptPrefix = "Generate a video of: ";
     const audioPromptPrefix = "Generate music of: ";
     const hfPrefix = "HF ";
-    const isCreativeCommand = userMessageText.trim().startsWith(imagePromptPrefix) || userMessageText.trim().startsWith(videoPromptPrefix) || userMessageText.trim().startsWith(audioPromptPrefix);
+    const ghostCodePrefix = "Ghost Code |";
+    const isCreativeCommand = userMessageText.trim().startsWith(imagePromptPrefix) || userMessageText.trim().startsWith(videoPromptPrefix) || userMessageText.trim().startsWith(audioPromptPrefix) || userMessageText.trim().startsWith(ghostCodePrefix);
 
     // Persistent HuggingFace chat logic
     if (activeModel.type === 'huggingface' && !userMessageText.trim().startsWith(hfPrefix) && !isCreativeCommand) {
@@ -264,6 +265,49 @@ const ChatInterface: React.FC = () => {
           setMessages(prev => [...prev, { id: aiResponseId, text: "Synthesizing audio...", sender: 'ai', media: { type: 'audio', prompt, status: 'generating', url: '' } }]);
           const audioUrl = await generateAudioFromAI(prompt);
           setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "Sonic synthesis complete.", media: { type: 'audio', prompt, status: 'complete', url: audioUrl } } : m));
+      } else if (userMessageText.trim().startsWith(ghostCodePrefix)) {
+        const parts = userMessageText.split('|').map(p => p.trim());
+        const params: Record<string, string> = {};
+        parts.slice(1).forEach(part => {
+            const [key, ...valueParts] = part.split(':');
+            if (key && valueParts.length > 0) {
+                params[key.trim().toLowerCase()] = valueParts.join(':').trim();
+            }
+        });
+
+        const lang = params.lang || 'javascript';
+        const request = params.request;
+
+        if (!request || request === '[description of code]') {
+            throw new Error("Missing 'request' parameter for Ghost Code protocol. Please describe the code you need.");
+        }
+        
+        const generationPrompt = `Generate a code snippet for the following request.\nLanguage: ${lang}\nRequest: "${request}"\n\nIMPORTANT: Only output the raw code, wrapped in a markdown code block for the specified language. Do not add any explanatory text, introduction, or conclusion.`;
+        
+        const aiMessageParts = [{ text: generationPrompt }];
+        const aiResponseId = (Date.now() + 1).toString();
+        setMessages((prev) => [...prev, { id: aiResponseId, text: '', sender: 'ai' }]);
+        
+        const stream = await sendMessageToAI([...messages, userMessage], aiMessageParts);
+
+        let fullResponse = '';
+        for await (const chunk of stream) {
+          fullResponse += chunk.text;
+          setMessages((prev) => prev.map((msg) => msg.id === aiResponseId ? { ...msg, text: fullResponse } : msg));
+        }
+
+        const commandRegex = /\[FUX_STATE:(.*?)\]$/;
+        const match = fullResponse.match(commandRegex);
+        let messageToDisplay = fullResponse;
+        if (match && match[1]) {
+          try {
+            const command = JSON.parse(match[1]);
+            if (command.theme) setTheme(command.theme as Theme);
+          } catch (e) { console.error("Failed to parse FUX_STATE command:", e); }
+          messageToDisplay = fullResponse.replace(commandRegex, '').trim();
+        }
+        setMessages((prev) => prev.map((msg) => msg.id === aiResponseId ? { ...msg, text: messageToDisplay } : msg));
+
       } else {
         const parts: any[] = [];
         if (userMessageText.trim()) parts.push({ text: userMessageText.trim() });
@@ -275,7 +319,7 @@ const ChatInterface: React.FC = () => {
         }
         const aiResponseId = (Date.now() + 1).toString();
         setMessages((prev) => [...prev, { id: aiResponseId, text: '', sender: 'ai' }]);
-        const stream = await sendMessageToAI([...messages], parts);
+        const stream = await sendMessageToAI([...messages, userMessage], parts);
         let fullResponse = '';
         for await (const chunk of stream) {
           fullResponse += chunk.text;
@@ -296,10 +340,11 @@ const ChatInterface: React.FC = () => {
     } catch (error) {
       console.error('Error in handleSend:', error);
       const errorId = (Date.now() + 1).toString();
-      const errorMessage = { id: errorId, text: 'Sorry, I encountered an error. Please check the console, your API key, or network connection.', sender: 'ai' };
+      const errorText = error instanceof Error ? error.message : 'An unknown error occurred.';
+      const errorMessage = { id: errorId, text: `Sorry, Captain. I encountered an error: ${errorText}`, sender: 'ai' as const };
       setMessages(prev => {
         const lastMsg = prev[prev.length - 1];
-        if (lastMsg.sender === 'ai' && (lastMsg.media?.status === 'generating' || lastMsg.huggingFaceData || lastMsg.text === '...')) {
+        if (lastMsg.sender === 'ai' && (lastMsg.media?.status === 'generating' || lastMsg.huggingFaceData || lastMsg.text === '...' || lastMsg.text === '')) {
             if (lastMsg.media) return prev.map(m => m.id === lastMsg.id ? { ...m, text: "Generation failed.", media: { ...m.media!, status: 'error' } } : m);
             if (lastMsg.huggingFaceData) return prev.map(m => m.id === lastMsg.id ? { ...m, text: `Hugging Face operation failed.`, huggingFaceData: { ...m.huggingFaceData!, error: (error as Error).message } } : m)
             return prev.map(m => m.id === lastMsg.id ? errorMessage : m);

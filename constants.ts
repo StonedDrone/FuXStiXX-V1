@@ -8,7 +8,7 @@ export const POWERS = [
   { name: "Execute Chaos", emoji: "💥", color: "#FF4500", font: "font-mono", description: "Simulates script and function execution.", prompt: "Identify a critical function within the codebase and simulate its execution under a high-stress scenario. Report the potential outcome and failure points." },
   { name: "Time Warp", emoji: "⏳", color: "#FFD700", font: "font-sans italic", description: "Accesses and interprets Git commit history.", prompt: "Access the project's history. Summarize the most significant changes and the overall development velocity from the last 7 commits." },
   { name: "Dependency Web", emoji: "🕸️", color: "#FF00FF", font: "font-mono", description: "Understands internal and external dependencies.", prompt: "Map out the full dependency web for this project, including both internal modules and external packages. Highlight any potential risks or conflicts." },
-  { name: "Ghost Code", emoji: "👻", color: "#C0C0C0", font: "font-sans", description: "Generates context-aware code and suggestions.", prompt: "Activate Ghost Code protocol. Generate a new, useful utility function that you believe is missing from this codebase, based on your analysis." },
+  { name: "Ghost Code", emoji: "👻", color: "#C0C0C0", font: "font-sans", description: "Generates a code snippet based on your specifications.", prompt: "Ghost Code | lang: [language] | request: [description of code]" },
 ];
 
 export const SUPER_POWERS = [

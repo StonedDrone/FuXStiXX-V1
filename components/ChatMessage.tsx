@@ -16,9 +16,13 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
 
   useEffect(() => {
     if (contentRef.current && (window as any).marked) {
-      const dirtyHtml = (window as any).marked.parse(message.text || '', { gfm: true, breaks: true, async: false });
-      const sanitizedHtml = dirtyHtml.replace(/<script.*?>.*?<\/script>/gi, '');
-      contentRef.current.innerHTML = sanitizedHtml;
+      if (message.text) {
+        const dirtyHtml = (window as any).marked.parse(message.text, { gfm: true, breaks: true, async: false });
+        const sanitizedHtml = dirtyHtml.replace(/<script.*?>.*?<\/script>/gi, '');
+        contentRef.current.innerHTML = sanitizedHtml;
+      } else {
+        contentRef.current.innerHTML = ''; // Clear content if text is empty
+      }
     }
   }, [message.text]);
 

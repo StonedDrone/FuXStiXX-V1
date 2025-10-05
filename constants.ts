@@ -26,6 +26,7 @@ export const HUGGING_FACE_POWERS = [
     { name: "Model Query", emoji: "🤗", color: "#FFD700", font: "font-mono", description: "Query any model on the Hugging Face Inference API.", prompt: "HF Model Query | model: [model_id] | prompt: [your_prompt]" },
     { name: "LLM Search", emoji: "🔍", color: "#FFD700", font: "font-mono", description: "Search for models on the Hugging Face Hub.", prompt: "HF LLM Search | query: [search_term]" },
     { name: "Space Explorer", emoji: "🚀", color: "#FFD700", font: "font-mono", description: "Get information about a Hugging Face Space.", prompt: "HF Space Explorer | space: [space_id]" },
+    { name: "Cache Space Intel", emoji: "💾", color: "#32CD32", font: "font-mono", description: "Downloads metadata for a Hugging Face Space for offline access.", prompt: "HF Cache Space | space: [space_id]" },
 ];
 
 

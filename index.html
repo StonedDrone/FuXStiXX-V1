@@ -38,11 +38,18 @@
                 '60%': { transform: 'translate(2px, 2px)' },
                 '80%': { transform: 'translate(2px, -2px)' },
                 '100%': { transform: 'translate(0)' },
+              },
+              tendrils: {
+                '0%, 100%': { 'box-shadow': '0 0 8px var(--color-primary), inset 0 0 4px var(--color-primary)' },
+                '25%': { 'box-shadow': '0 0 12px var(--color-accent), inset 0 0 6px var(--color-accent), 4px -4px 10px var(--color-primary)' },
+                '50%': { 'box-shadow': '0 0 8px var(--color-primary), inset 0 0 4px var(--color-primary), -4px 4px 10px var(--color-accent)' },
+                '75%': { 'box-shadow': '0 0 12px var(--color-accent), inset 0 0 6px var(--color-accent), -4px -4px 10px var(--color-primary)' },
               }
             },
             animation: {
               pulse: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
               glitch: 'glitch 0.2s linear infinite',
+              tendrils: 'tendrils 4s linear infinite',
             }
           },
         },
@@ -99,6 +106,33 @@
         --color-secondary: #FFFFFF;
         --color-accent: #FFFF00;
       }
+      [data-theme='stealth-overdrive'] {
+        --color-base: #0D021A;
+        --color-layer-1: #190A28;
+        --color-layer-2: #2E143D;
+        --color-layer-3: #4A2254;
+        --color-primary: #FFFF00;
+        --color-secondary: #FFFFFF;
+        --color-accent: #FFFF00;
+      }
+      [data-theme='chaotic-pulse'] {
+        --color-base: #1A0000;
+        --color-layer-1: #2B0000;
+        --color-layer-2: #4D0000;
+        --color-layer-3: #6F0000;
+        --color-primary: #FF4500;
+        --color-secondary: #FFC0CB;
+        --color-accent: #FF4500;
+      }
+      [data-theme='focused-tendril-swarm'] {
+        --color-base: #051916;
+        --color-layer-1: #0A2823;
+        --color-layer-2: #123D37;
+        --color-layer-3: #1B524A;
+        --color-primary: #66FFB2;
+        --color-secondary: #B2E8D9;
+        --color-accent: #2EFFD2;
+      }
 
       body {
         padding: 4px;
@@ -119,6 +153,18 @@
       }
       [data-theme='chaos'] body {
          animation: glitch 0.1s linear infinite alternate;
+      }
+      [data-theme='stealth-overdrive'] #root {
+        animation: pulse 1s infinite;
+      }
+      [data-theme='chaotic-pulse'] body {
+         animation: glitch 0.1s linear infinite alternate;
+      }
+      [data-theme='chaotic-pulse'] #root {
+        animation: pulse 2.5s infinite;
+      }
+      [data-theme='focused-tendril-swarm'] #root {
+        animation: tendrils 4s linear infinite;
       }
       /* Custom scrollbar for a more integrated look */
       ::-webkit-scrollbar {

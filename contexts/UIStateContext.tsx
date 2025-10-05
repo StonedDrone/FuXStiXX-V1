@@ -1,6 +1,6 @@
 import React, { createContext, useState, useContext, ReactNode } from 'react';
 
-export type Theme = 'normal' | 'analyzing' | 'chaos' | 'stealth' | 'overdrive';
+export type Theme = string;
 
 interface UIStateContextType {
   theme: Theme;

@@ -19,7 +19,19 @@ import { SpeakerOffIcon } from './icons/SpeakerOffIcon';
 import { MicrophoneIcon } from './icons/MicrophoneIcon';
 import CameraView from './CameraView';
 
-// --- Audio Utility Functions ---
+// --- Media Utility Functions ---
+const blobToBase64 = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(blob);
+        reader.onload = () => {
+            const result = (reader.result as string).split(',')[1];
+            resolve(result);
+        };
+        reader.onerror = error => reject(error);
+    });
+};
+
 function encode(bytes: Uint8Array) {
   let binary = '';
   const len = bytes.byteLength;
@@ -69,7 +81,7 @@ function createBlob(data: Float32Array): Blob {
     mimeType: 'audio/pcm;rate=16000',
   };
 }
-// --- End Audio Utility Functions ---
+// --- End Media Utility Functions ---
 
 
 type ActiveModel = {
@@ -119,6 +131,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, {}>((props, ref) => {
   const [liveStatus, setLiveStatus] = useState<LiveStatus>('idle');
   const [liveTranscripts, setLiveTranscripts] = useState<LiveTranscripts>({ user: '', ai: '' });
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [isLiveVideoEnabled, setIsLiveVideoEnabled] = useState(false);
   const { setTheme } = useUIState();
 
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -130,6 +143,10 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, {}>((props, ref) => {
   
   // Refs for live conversation resources
   const liveSessionPromiseRef = useRef<Promise<any> | null>(null);
+  const liveVideoRef = useRef<HTMLVideoElement>(null);
+  const liveCanvasRef = useRef<HTMLCanvasElement>(null);
+  const frameIntervalRef = useRef<number | null>(null);
+  const videoStreamRef = useRef<MediaStream | null>(null);
   const audioResourcesRef = useRef<{
     inputAudioContext: AudioContext;
     outputAudioContext: AudioContext;
@@ -236,6 +253,18 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, {}>((props, ref) => {
 
   const stopLiveConversation = useCallback(async () => {
     console.log('Stopping live conversation...');
+
+    if (frameIntervalRef.current) {
+        window.clearInterval(frameIntervalRef.current);
+        frameIntervalRef.current = null;
+    }
+    if (videoStreamRef.current) {
+        videoStreamRef.current.getTracks().forEach(track => track.stop());
+        videoStreamRef.current = null;
+    }
+    if(liveVideoRef.current) liveVideoRef.current.srcObject = null;
+    setIsLiveVideoEnabled(false);
+
     if (liveSessionPromiseRef.current) {
         try {
             const session = await liveSessionPromiseRef.current;
@@ -249,13 +278,16 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, {}>((props, ref) => {
     if (audioResourcesRef.current) {
         audioResourcesRef.current.stream?.getTracks().forEach(track => track.stop());
         audioResourcesRef.current.scriptProcessor?.disconnect();
-        audioResourcesRef.current.inputAudioContext?.close();
-        
+        if (audioResourcesRef.current.inputAudioContext?.state !== 'closed') {
+             audioResourcesRef.current.inputAudioContext?.close();
+        }
         for (const source of audioResourcesRef.current.sources.values()) {
             source.stop();
         }
         audioResourcesRef.current.sources.clear();
-        audioResourcesRef.current.outputAudioContext?.close();
+        if (audioResourcesRef.current.outputAudioContext?.state !== 'closed') {
+            audioResourcesRef.current.outputAudioContext?.close();
+        }
         audioResourcesRef.current = null;
     }
     
@@ -263,6 +295,69 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, {}>((props, ref) => {
     setLiveTranscripts({ user: '', ai: '' });
     liveTranscriptsRef.current = { userInput: '', aiOutput: '' };
   }, []);
+
+  const toggleLiveVideoStream = useCallback(async () => {
+    if (isLiveVideoEnabled) {
+        // Stop the video stream
+        if (frameIntervalRef.current) window.clearInterval(frameIntervalRef.current);
+        frameIntervalRef.current = null;
+        if (videoStreamRef.current) {
+            videoStreamRef.current.getTracks().forEach(track => track.stop());
+            videoStreamRef.current = null;
+        }
+        if(liveVideoRef.current) liveVideoRef.current.srcObject = null;
+        setIsLiveVideoEnabled(false);
+    } else {
+        // Start the video stream
+        if (!liveSessionPromiseRef.current) {
+            console.error("Live session not active. Cannot start video stream.");
+            setMessages(prev => [...prev, {id: Date.now().toString(), text: "Live session is not active. Please start a conversation first.", sender: 'ai'}]);
+            return;
+        }
+        try {
+            const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+            videoStreamRef.current = videoStream;
+            if (liveVideoRef.current) {
+                liveVideoRef.current.srcObject = videoStream;
+            }
+            setIsLiveVideoEnabled(true);
+
+            const FRAME_RATE = 2; // frames per second
+            const JPEG_QUALITY = 0.7;
+
+            frameIntervalRef.current = window.setInterval(() => {
+                if (liveVideoRef.current && liveCanvasRef.current && liveVideoRef.current.readyState >= 2) { // HAVE_CURRENT_DATA
+                    const videoEl = liveVideoRef.current;
+                    const canvasEl = liveCanvasRef.current;
+                    const ctx = canvasEl.getContext('2d');
+
+                    if (ctx) {
+                        canvasEl.width = videoEl.videoWidth;
+                        canvasEl.height = videoEl.videoHeight;
+                        ctx.drawImage(videoEl, 0, 0, videoEl.videoWidth, videoEl.videoHeight);
+                        canvasEl.toBlob(
+                            async (blob) => {
+                                if (blob) {
+                                    const base64Data = await blobToBase64(blob);
+                                    liveSessionPromiseRef.current?.then((session) => {
+                                        session.sendRealtimeInput({ media: { data: base64Data, mimeType: 'image/jpeg' } });
+                                    });
+                                }
+                            },
+                            'image/jpeg',
+                            JPEG_QUALITY
+                        );
+                    }
+                }
+            }, 1000 / FRAME_RATE);
+
+        } catch (error) {
+            console.error("Failed to start video stream:", error);
+            setMessages(prev => [...prev, {id: Date.now().toString(), text: "Could not start video stream. Please check camera permissions.", sender: 'ai'}]);
+            setIsLiveVideoEnabled(false);
+        }
+    }
+  }, [isLiveVideoEnabled]);
 
   const startLiveConversation = useCallback(async () => {
     setLiveStatus('connecting');
@@ -692,25 +787,42 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, {}>((props, ref) => {
     }, [liveTranscripts]);
 
     return (
-      <div className="w-full flex flex-col bg-layer-1 border border-layer-3 rounded-lg p-3 h-[120px] text-gray-200 font-mono text-sm">
-        <div className={`flex items-center space-x-2 text-primary mb-2 flex-shrink-0 ${pulse ? 'animate-pulse' : ''}`}>
-          <MicrophoneIcon />
-          <span>{statusText}</span>
-        </div>
-        <div className="w-full text-xs text-secondary flex-1 overflow-y-auto pr-2 min-h-0">
-          {liveTranscripts.user && (
-            <div className="flex items-start gap-2 mb-1">
-              <span className="font-bold text-gray-400 flex-shrink-0">Captain:</span>
-              <p className="flex-1 break-words whitespace-pre-wrap">{liveTranscripts.user}</p>
-            </div>
-          )}
-          {liveTranscripts.ai && (
-            <div className="flex items-start gap-2">
-              <span className="font-bold text-primary flex-shrink-0">FuXStiXX:</span>
-              <p className="flex-1 break-words whitespace-pre-wrap">{liveTranscripts.ai}</p>
-            </div>
-          )}
-          <div ref={transcriptEndRef} />
+      <div className="w-full flex flex-col bg-layer-1 border border-layer-3 rounded-lg text-gray-200 font-mono text-sm overflow-hidden">
+        {isLiveVideoEnabled && (
+          <div className="relative w-full aspect-video bg-black">
+              <video ref={liveVideoRef} autoPlay playsInline muted className="w-full h-full object-cover transform -scale-x-100" />
+          </div>
+        )}
+        <div className="p-3">
+          <div className={`flex items-center justify-between text-primary mb-2 flex-shrink-0`}>
+              <div className={`flex items-center space-x-2 ${pulse ? 'animate-pulse' : ''}`}>
+                  <MicrophoneIcon />
+                  <span>{statusText}</span>
+              </div>
+              <button 
+                  onClick={toggleLiveVideoStream} 
+                  className={`p-2 rounded-full transition-colors duration-200 ${isLiveVideoEnabled ? 'text-danger' : 'text-secondary'} hover:bg-layer-2`} 
+                  aria-label={isLiveVideoEnabled ? "Stop Vision Stream" : "Start Vision Stream"}
+                  title={isLiveVideoEnabled ? "Stop Vision Stream" : "Start Vision Stream"}
+              >
+                  <CameraIcon />
+              </button>
+          </div>
+          <div className="w-full text-xs text-secondary overflow-y-auto pr-2 max-h-24">
+            {liveTranscripts.user && (
+              <div className="flex items-start gap-2 mb-1">
+                <span className="font-bold text-gray-400 flex-shrink-0">Captain:</span>
+                <p className="flex-1 break-words whitespace-pre-wrap">{liveTranscripts.user}</p>
+              </div>
+            )}
+            {liveTranscripts.ai && (
+              <div className="flex items-start gap-2">
+                <span className="font-bold text-primary flex-shrink-0">FuXStiXX:</span>
+                <p className="flex-1 break-words whitespace-pre-wrap">{liveTranscripts.ai}</p>
+              </div>
+            )}
+            <div ref={transcriptEndRef} />
+          </div>
         </div>
       </div>
     );
@@ -721,6 +833,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, {}>((props, ref) => {
       className={`relative flex flex-col h-full bg-base p-4 transition-all duration-200 ${isDragging ? 'outline-dashed outline-2 outline-offset-[-8px] outline-primary' : ''}`}
       onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
     >
+      <canvas ref={liveCanvasRef} className="hidden"></canvas>
       {isCameraOpen && <CameraView onClose={() => setIsCameraOpen(false)} onCapture={handleCameraCapture} />}
       <div className="flex-1 overflow-y-auto pr-2">
         <div className="space-y-6">

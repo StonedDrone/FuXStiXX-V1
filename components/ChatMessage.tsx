@@ -44,6 +44,12 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
         ? 'bg-layer-1' 
         : 'bg-accent text-black'
       }`}>
+        {message.status === 'generating' && !message.text && !message.media && !message.huggingFaceData && (
+          <div className="flex items-center space-x-2 text-secondary animate-pulse">
+              <LoaderIcon />
+              <span className="text-sm">Thinking...</span>
+          </div>
+        )}
         <div 
           ref={contentRef} 
           className={`prose prose-sm prose-invert max-w-none 
@@ -53,7 +59,6 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
             ${!isAI ? 'prose-p:text-black prose-strong:text-black prose-headings:text-black prose-a:text-black prose-code:text-secondary' : ''}
           `}
         >
-          {message.text === '...' && <span className="animate-pulse">...</span>}
         </div>
         {message.attachments && message.attachments.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-2">

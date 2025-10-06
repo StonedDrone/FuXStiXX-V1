@@ -1,6 +1,7 @@
 import React from 'react';
 import { HuggingFaceResult as HuggingFaceResultType } from '../types';
 import { HuggingFaceIcon } from './icons/HuggingFaceIcon';
+import { LoaderIcon } from './icons/LoaderIcon';
 
 interface HuggingFaceResultProps {
   data: HuggingFaceResultType;
@@ -37,35 +38,54 @@ const renderResult = (result: any) => {
 const ModelQueryResult: React.FC<{ data: HuggingFaceResultType }> = ({ data }) => (
     <ResultCard title={`Query: ${data.query.model}`}>
         <p className="text-secondary mb-2 italic">&ldquo;{data.query.prompt}&rdquo;</p>
-        {renderResult(data.result)}
+        {data.result === null ? (
+            <div className="flex items-center space-x-2 text-secondary animate-pulse">
+                <LoaderIcon />
+                <span>Querying...</span>
+            </div>
+        ) : renderResult(data.result)}
     </ResultCard>
 );
 
 const ModelSearchResult: React.FC<{ data: HuggingFaceResultType }> = ({ data }) => (
     <ResultCard title={`Search: "${data.query.query}"`}>
-        <div className="space-y-3">
-            {data.result.models?.slice(0, 5).map((model: any) => (
-                <div key={model.id} className="border-b border-layer-3 pb-2 last:border-b-0">
-                    <a href={`https://huggingface.co/${model.id}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-semibold font-mono">{model.id}</a>
-                    <p className="text-xs text-secondary mt-1">❤️ {model.likes} | pipeline: {model.pipeline_tag}</p>
-                    {model.cardData?.description && <p className="text-xs text-gray-400 mt-1 truncate">{model.cardData.description}</p>}
-                </div>
-            ))}
-            {data.result.models?.length === 0 && <p className="text-secondary">No models found.</p>}
-        </div>
+        {data.result === null ? (
+            <div className="flex items-center space-x-2 text-secondary animate-pulse">
+                <LoaderIcon />
+                <span>Searching the Hub...</span>
+            </div>
+        ) : (
+            <div className="space-y-3">
+                {data.result.models?.slice(0, 5).map((model: any) => (
+                    <div key={model.id} className="border-b border-layer-3 pb-2 last:border-b-0">
+                        <a href={`https://huggingface.co/${model.id}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-semibold font-mono">{model.id}</a>
+                        <p className="text-xs text-secondary mt-1">❤️ {model.likes} | pipeline: {model.pipeline_tag}</p>
+                        {model.cardData?.description && <p className="text-xs text-gray-400 mt-1 truncate">{model.cardData.description}</p>}
+                    </div>
+                ))}
+                {data.result.models?.length === 0 && <p className="text-secondary">No models found.</p>}
+            </div>
+        )}
     </ResultCard>
 );
 
 const SpaceInfoResult: React.FC<{ data: HuggingFaceResultType }> = ({ data }) => (
     <ResultCard title={`Space: ${data.query.space}`}>
-        <div className="font-mono text-xs space-y-1">
-            <p><span className="text-secondary w-20 inline-block">ID:</span> {data.result.id}</p>
-            <p><span className="text-secondary w-20 inline-block">Author:</span> {data.result.author}</p>
-            <p><span className="text-secondary w-20 inline-block">Likes:</span> ❤️ {data.result.likes}</p>
-            <p><span className="text-secondary w-20 inline-block">SDK:</span> {data.result.sdk}</p>
-            <p><span className="text-secondary w-20 inline-block">Hardware:</span> {data.result.hardware?.requested || 'N/A'}</p>
-            <a href={`https://huggingface.co/spaces/${data.result.id}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline block mt-2">Visit Space →</a>
-        </div>
+        {data.result === null ? (
+            <div className="flex items-center space-x-2 text-secondary animate-pulse">
+                <LoaderIcon />
+                <span>Fetching intel...</span>
+            </div>
+        ) : (
+            <div className="font-mono text-xs space-y-1">
+                <p><span className="text-secondary w-20 inline-block">ID:</span> {data.result.id}</p>
+                <p><span className="text-secondary w-20 inline-block">Author:</span> {data.result.author}</p>
+                <p><span className="text-secondary w-20 inline-block">Likes:</span> ❤️ {data.result.likes}</p>
+                <p><span className="text-secondary w-20 inline-block">SDK:</span> {data.result.sdk}</p>
+                <p><span className="text-secondary w-20 inline-block">Hardware:</span> {data.result.hardware?.requested || 'N/A'}</p>
+                <a href={`https://huggingface.co/spaces/${data.result.id}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline block mt-2">Visit Space →</a>
+            </div>
+        )}
     </ResultCard>
 );
 

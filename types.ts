@@ -11,7 +11,7 @@ export type HuggingFaceDataType = 'modelQuery' | 'modelSearch' | 'spaceInfo';
 export interface HuggingFaceResult {
     type: HuggingFaceDataType;
     query: Record<string, any>;
-    result: any;
+    result: any | null;
     error?: string;
 }
 
@@ -20,6 +20,7 @@ export interface Message {
   text: string;
   sender: Sender;
   attachments?: Attachment[];
+  status?: 'generating' | 'complete' | 'error';
   media?: {
     type: 'image' | 'video' | 'audio';
     url: string;

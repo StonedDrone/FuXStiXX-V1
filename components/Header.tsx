@@ -1,13 +1,15 @@
 import React from 'react';
 import { HeartIcon } from './icons/HeartIcon';
 import { MusicIcon } from './icons/MusicIcon';
+import { RefreshIcon } from './icons/RefreshIcon';
 
 interface HeaderProps {
   onCodexToggle: () => void;
   onPlaylistToggle: () => void;
+  onClearChat: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ onCodexToggle, onPlaylistToggle }) => {
+const Header: React.FC<HeaderProps> = ({ onCodexToggle, onPlaylistToggle, onClearChat }) => {
   return (
     <header className="flex-shrink-0 bg-base border-b border-layer-3 p-4 flex justify-between items-center">
       <div>
@@ -17,6 +19,14 @@ const Header: React.FC<HeaderProps> = ({ onCodexToggle, onPlaylistToggle }) => {
         <p className="text-sm text-secondary">Stoned Drones Chaos Engine</p>
       </div>
       <div className="flex items-center space-x-2">
+         <button 
+          onClick={onClearChat}
+          className="p-2 rounded-full text-secondary hover:text-danger hover:bg-layer-2 transition-colors duration-200"
+          aria-label="Reset Conversation"
+          title="Reset Conversation"
+        >
+          <RefreshIcon />
+        </button>
         <button 
           onClick={onPlaylistToggle}
           className="p-2 rounded-full text-secondary hover:text-primary hover:bg-layer-2 transition-colors duration-200"

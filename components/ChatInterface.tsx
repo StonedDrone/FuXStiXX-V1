@@ -1,7 +1,8 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { GoogleGenAI, Blob, LiveServerMessage, Modality } from "@google/genai";
 import { Message, Attachment } from '../types';
 import { CHECK_IN_PROMPT } from '../constants';
-import { sendMessageToAI, generateImageFromAI, generateVideoFromAI, generateAudioFromAI } from '../services/geminiService';
+import { sendMessageToAI, generateImageFromAI, generateVideoFromAI, generateAudioFromAI, resetChat } from '../services/geminiService';
 import * as hfService from '../services/huggingFaceService';
 import ChatMessage from './ChatMessage';
 import { SendIcon } from './icons/SendIcon';
@@ -13,13 +14,77 @@ import { useUIState, Theme } from '../contexts/UIStateContext';
 import { ZapIcon } from './icons/ZapIcon';
 import { PowersDropdown } from './PowersDropdown';
 import { HuggingFaceIcon } from './icons/HuggingFaceIcon';
+import { SpeakerOnIcon } from './icons/SpeakerOnIcon';
+import { SpeakerOffIcon } from './icons/SpeakerOffIcon';
+import { MicrophoneIcon } from './icons/MicrophoneIcon';
+import CameraView from './CameraView';
+
+// --- Audio Utility Functions ---
+function encode(bytes: Uint8Array) {
+  let binary = '';
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+function decode(base64: string) {
+  const binaryString = atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
+}
+
+async function decodeAudioData(
+  data: Uint8Array,
+  ctx: AudioContext,
+  sampleRate: number,
+  numChannels: number,
+): Promise<AudioBuffer> {
+  const dataInt16 = new Int16Array(data.buffer);
+  const frameCount = dataInt16.length / numChannels;
+  const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
+
+  for (let channel = 0; channel < numChannels; channel++) {
+    const channelData = buffer.getChannelData(channel);
+    for (let i = 0; i < frameCount; i++) {
+      channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
+    }
+  }
+  return buffer;
+}
+
+function createBlob(data: Float32Array): Blob {
+  const l = data.length;
+  const int16 = new Int16Array(l);
+  for (let i = 0; i < l; i++) {
+    int16[i] = data[i] * 32768;
+  }
+  return {
+    data: encode(new Uint8Array(int16.buffer)),
+    mimeType: 'audio/pcm;rate=16000',
+  };
+}
+// --- End Audio Utility Functions ---
+
 
 type ActiveModel = {
     type: 'gemini' | 'huggingface';
     modelId: string;
 };
 
-const ChatInterface: React.FC = () => {
+type LiveStatus = 'idle' | 'connecting' | 'active' | 'error';
+type LiveTranscripts = { user: string; ai: string; };
+
+export interface ChatInterfaceHandle {
+  clearChat: () => void;
+}
+
+const ChatInterface = forwardRef<ChatInterfaceHandle, {}>((props, ref) => {
   const initialMessage: Message = {
       id: 'init',
       text: 'FuXStiXX online. I am your co-pilot, Captain. Ready to progress the Mission. How may I assist?',
@@ -49,6 +114,11 @@ const ChatInterface: React.FC = () => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [activeModel, setActiveModel] = useState<ActiveModel>({ type: 'gemini', modelId: 'gemini-2.5-flash' });
   const [isPowersOpen, setIsPowersOpen] = useState(false);
+  const [isVoiceEnabled, setIsVoiceEnabled] = useState(false);
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [liveStatus, setLiveStatus] = useState<LiveStatus>('idle');
+  const [liveTranscripts, setLiveTranscripts] = useState<LiveTranscripts>({ user: '', ai: '' });
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
   const { setTheme } = useUIState();
 
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -56,6 +126,26 @@ const ChatInterface: React.FC = () => {
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const powersButtonRef = useRef<HTMLButtonElement>(null);
   const powersDropdownRef = useRef<HTMLDivElement>(null);
+  const sendAfterCaptureRef = useRef(false);
+  
+  // Refs for live conversation resources
+  const liveSessionPromiseRef = useRef<Promise<any> | null>(null);
+  const audioResourcesRef = useRef<{
+    inputAudioContext: AudioContext;
+    outputAudioContext: AudioContext;
+    stream: MediaStream;
+    scriptProcessor: ScriptProcessorNode;
+    sources: Set<AudioBufferSourceNode>;
+    nextStartTime: number;
+  } | null>(null);
+  const liveTranscriptsRef = useRef({ userInput: '', aiOutput: '' });
+
+  useImperativeHandle(ref, () => ({
+    clearChat: () => {
+      setMessages([initialMessage]);
+      resetChat();
+    }
+  }));
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -73,6 +163,30 @@ const ChatInterface: React.FC = () => {
     return () => {
       window.removeEventListener('online', goOnline);
       window.removeEventListener('offline', goOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    const loadVoices = () => {
+        const availableVoices = window.speechSynthesis.getVoices();
+        const englishVoices = availableVoices.filter(v => v.lang.startsWith('en'));
+        setVoices(englishVoices);
+    };
+
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.onvoiceschanged = loadVoices;
+        loadVoices();
+    }
+
+    return () => {
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.onvoiceschanged = null;
+            window.speechSynthesis.cancel();
+        }
+        // Ensure live conversation is stopped on unmount
+        if (liveStatus !== 'idle') {
+            stopLiveConversation();
+        }
     };
   }, []);
   
@@ -94,6 +208,178 @@ const ChatInterface: React.FC = () => {
     };
   }, [isPowersOpen]);
 
+  const speakText = useCallback((text: string) => {
+    if (!('speechSynthesis' in window) || text.trim() === '') {
+        return;
+    }
+    
+    const cleanedText = text
+        .replace(/```[\s\S]*?```/g, 'Code block follows.')
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/\*\*(.*?)\*\*/g, '$1')
+        .replace(/\*(.*?)\*/g, '$1')
+        .replace(/\[.*?\]\(.*?\)/g, (match) => match.split('](')[0].substring(1))
+        .replace(/#+\s/g, '');
+
+    const utterance = new SpeechSynthesisUtterance(cleanedText);
+    
+    const fuxstixxVoice = voices.find(v => v.name.includes('Google US English')) || voices.find(v => v.lang === 'en-US') || voices[0];
+    if (fuxstixxVoice) {
+        utterance.voice = fuxstixxVoice;
+    }
+    utterance.rate = 1.0;
+    utterance.pitch = 0.9;
+    
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+  }, [voices]);
+
+  const stopLiveConversation = useCallback(async () => {
+    console.log('Stopping live conversation...');
+    if (liveSessionPromiseRef.current) {
+        try {
+            const session = await liveSessionPromiseRef.current;
+            session.close();
+        } catch (e) {
+            console.error('Error closing live session:', e);
+        }
+        liveSessionPromiseRef.current = null;
+    }
+
+    if (audioResourcesRef.current) {
+        audioResourcesRef.current.stream?.getTracks().forEach(track => track.stop());
+        audioResourcesRef.current.scriptProcessor?.disconnect();
+        audioResourcesRef.current.inputAudioContext?.close();
+        
+        for (const source of audioResourcesRef.current.sources.values()) {
+            source.stop();
+        }
+        audioResourcesRef.current.sources.clear();
+        audioResourcesRef.current.outputAudioContext?.close();
+        audioResourcesRef.current = null;
+    }
+    
+    setLiveStatus('idle');
+    setLiveTranscripts({ user: '', ai: '' });
+    liveTranscriptsRef.current = { userInput: '', aiOutput: '' };
+  }, []);
+
+  const startLiveConversation = useCallback(async () => {
+    setLiveStatus('connecting');
+    liveTranscriptsRef.current = { userInput: '', aiOutput: '' };
+
+    try {
+      const ai = new GoogleGenAI({apiKey: process.env.API_KEY!});
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+      const outputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+      const scriptProcessor = inputAudioContext.createScriptProcessor(4096, 1, 1);
+      const sources = new Set<AudioBufferSourceNode>();
+      let nextStartTime = 0;
+
+      audioResourcesRef.current = { stream, inputAudioContext, outputAudioContext, scriptProcessor, sources, nextStartTime };
+      
+      liveSessionPromiseRef.current = ai.live.connect({
+          model: 'gemini-2.5-flash-native-audio-preview-09-2025',
+          callbacks: {
+              onopen: () => {
+                  setLiveStatus('active');
+                  const source = inputAudioContext.createMediaStreamSource(stream);
+                  scriptProcessor.onaudioprocess = (audioProcessingEvent) => {
+                      const inputData = audioProcessingEvent.inputBuffer.getChannelData(0);
+                      const pcmBlob = createBlob(inputData);
+                      liveSessionPromiseRef.current?.then((session) => {
+                          session.sendRealtimeInput({ media: pcmBlob });
+                      });
+                  };
+                  source.connect(scriptProcessor);
+                  scriptProcessor.connect(inputAudioContext.destination);
+              },
+              onmessage: async (message: LiveServerMessage) => {
+                  if (message.serverContent?.inputTranscription) {
+                      const text = message.serverContent.inputTranscription.text;
+                      liveTranscriptsRef.current.userInput += text;
+                      setLiveTranscripts(prev => ({...prev, user: liveTranscriptsRef.current.userInput}));
+                  }
+                   if (message.serverContent?.outputTranscription) {
+                      const text = message.serverContent.outputTranscription.text;
+                      liveTranscriptsRef.current.aiOutput += text;
+                      setLiveTranscripts(prev => ({...prev, ai: liveTranscriptsRef.current.aiOutput}));
+                  }
+                  if (message.serverContent?.turnComplete) {
+                      const userMsg = liveTranscriptsRef.current.userInput.trim();
+                      const aiMsg = liveTranscriptsRef.current.aiOutput.trim();
+
+                      if (userMsg) {
+                          setMessages(prev => [...prev, {id: Date.now().toString(), text: userMsg, sender: 'user'}]);
+                      }
+                      if (aiMsg) {
+                          setMessages(prev => [...prev, {id: (Date.now() + 1).toString(), text: aiMsg, sender: 'ai'}]);
+                      }
+
+                      liveTranscriptsRef.current = { userInput: '', aiOutput: '' };
+                      setLiveTranscripts({user: '', ai: ''});
+                  }
+
+                  const base64EncodedAudioString = message.serverContent?.modelTurn?.parts[0]?.inlineData.data;
+                  if (base64EncodedAudioString && audioResourcesRef.current) {
+                      let res = audioResourcesRef.current;
+                      res.nextStartTime = Math.max(res.nextStartTime, res.outputAudioContext.currentTime);
+                      const audioBuffer = await decodeAudioData(decode(base64EncodedAudioString), res.outputAudioContext, 24000, 1);
+                      const source = res.outputAudioContext.createBufferSource();
+                      source.buffer = audioBuffer;
+                      source.connect(res.outputAudioContext.destination);
+                      source.addEventListener('ended', () => { res.sources.delete(source); });
+                      source.start(res.nextStartTime);
+                      res.nextStartTime += audioBuffer.duration;
+                      res.sources.add(source);
+                  }
+
+                  if (message.serverContent?.interrupted && audioResourcesRef.current) {
+                      for (const source of audioResourcesRef.current.sources.values()) {
+                          source.stop();
+                          audioResourcesRef.current.sources.delete(source);
+                      }
+                      audioResourcesRef.current.nextStartTime = 0;
+                  }
+              },
+              onerror: (e: ErrorEvent) => {
+                  console.error('Live session error:', e);
+                  setMessages(prev => [...prev, {id: Date.now().toString(), text: "Live conversation encountered an error.", sender: 'ai'}]);
+                  setLiveStatus('error');
+                  stopLiveConversation();
+              },
+              onclose: (e: CloseEvent) => {
+                  console.log('Live session closed.');
+                  stopLiveConversation();
+              },
+          },
+          config: {
+              responseModalities: [Modality.AUDIO],
+              inputAudioTranscription: {},
+              outputAudioTranscription: {},
+              speechConfig: {
+                  voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
+              },
+          },
+      });
+
+    } catch (error) {
+        console.error('Failed to start live conversation:', error);
+        setMessages(prev => [...prev, {id: Date.now().toString(), text: "Could not start live conversation. Please check microphone permissions.", sender: 'ai'}]);
+        setLiveStatus('error');
+        stopLiveConversation();
+    }
+  }, [stopLiveConversation]);
+
+  const handleToggleLive = () => {
+      if (liveStatus === 'idle' || liveStatus === 'error') {
+          startLiveConversation();
+      } else {
+          stopLiveConversation();
+      }
+  };
+
   const handlePowerClick = useCallback((prompt: string) => {
     setInput(prompt);
     // Using a power resets the active model to FuXStiXX for consistency
@@ -113,89 +399,6 @@ const ChatInterface: React.FC = () => {
     });
   };
   
-  const handleHuggingFaceCommand = async (commandString: string) => {
-    const aiResponseId = (Date.now() + 1).toString();
-    
-    const parts = commandString.split('|').map(p => p.trim());
-    const commandPart = parts[0];
-    const params: Record<string, string> = {};
-    parts.slice(1).forEach(part => {
-        const [key, ...valueParts] = part.split(':');
-        if (key && valueParts.length > 0) {
-            params[key.trim()] = valueParts.join(':').trim();
-        }
-    });
-
-    let type: any;
-    let promise: Promise<any>;
-    let query = {};
-    let text = `Accessing Hugging Face Hub, Captain...`;
-
-    try {
-        if (commandPart === 'HF Model Query') {
-            type = 'modelQuery';
-            query = { model: params.model, prompt: params.prompt };
-            if (!params.model || !params.prompt) throw new Error("Missing 'model' or 'prompt' parameter for Model Query.");
-            text = `Querying model: \`${params.model}\`...`;
-            promise = hfService.queryModel(params.model, params.prompt);
-            promise.then(() => setActiveModel({ type: 'huggingface', modelId: params.model }));
-        } else if (commandPart === 'HF LLM Search') {
-            type = 'modelSearch';
-            query = { query: params.query };
-             if (!params.query) throw new Error("Missing 'query' parameter for LLM Search.");
-            text = `Searching for models matching: \`${params.query}\`...`;
-            promise = hfService.searchModels(params.query);
-        } else if (commandPart === 'HF Space Explorer') {
-            type = 'spaceInfo';
-            query = { space: params.space };
-             if (!params.space) throw new Error("Missing 'space' parameter for Space Explorer.");
-            text = `Exploring Space: \`${params.space}\`...`;
-            promise = hfService.getSpaceInfo(params.space, false);
-        } else if (commandPart === 'HF Cache Space') {
-            type = 'spaceInfo';
-            query = { space: params.space };
-             if (!params.space) throw new Error("Missing 'space' parameter for Cache Space.");
-            text = `Attempting to cache intel for Space: \`${params.space}\`...`;
-            promise = hfService.getSpaceInfo(params.space, true); // forceRefresh = true
-        } else {
-            throw new Error('Unknown Hugging Face command.');
-        }
-
-        setMessages(prev => [...prev, { id: aiResponseId, text, sender: 'ai' }]);
-        const result = await promise;
-
-        const successText = commandPart === 'HF Cache Space'
-            ? `Intel for \`${params.space}\` has been successfully cached for offline use.`
-            : `Hugging Face operation complete, Captain.`;
-
-        setMessages(prev => prev.map(m => m.id === aiResponseId ? {
-             ...m,
-             text: successText,
-             huggingFaceData: { type, query, result }
-        } : m));
-
-    } catch (error: any) {
-        console.error('Hugging Face command failed:', error);
-        const errorMessage = error.message || 'An unknown error occurred.';
-        setMessages(prev => {
-            const existingMsg = prev.find(m => m.id === aiResponseId);
-            if (existingMsg) {
-                return prev.map(m => m.id === aiResponseId ? {
-                     ...m,
-                     text: `Hugging Face operation failed, Captain.`,
-                     huggingFaceData: { type, query, result: null, error: errorMessage }
-                } : m);
-            }
-            return [...prev, {
-                id: aiResponseId,
-                sender: 'ai',
-                text: `Hugging Face operation failed, Captain.`,
-                huggingFaceData: { type, query, result: null, error: errorMessage }
-            }];
-        });
-    }
-  };
-
   const handleSend = useCallback(async () => {
     const userMessageText = input;
     if ((!userMessageText.trim() && attachments.length === 0) || isLoading || !isOnline) return;
@@ -207,7 +410,6 @@ const ChatInterface: React.FC = () => {
     const ghostCodePrefix = "Ghost Code |";
     const isCreativeCommand = userMessageText.trim().startsWith(imagePromptPrefix) || userMessageText.trim().startsWith(videoPromptPrefix) || userMessageText.trim().startsWith(audioPromptPrefix) || userMessageText.trim().startsWith(ghostCodePrefix);
 
-    // Persistent HuggingFace chat logic
     if (activeModel.type === 'huggingface' && !userMessageText.trim().startsWith(hfPrefix) && !isCreativeCommand) {
         const userMessage: Message = { id: Date.now().toString(), text: userMessageText.trim(), sender: 'user' };
         setMessages((prev) => [...prev, userMessage]);
@@ -216,18 +418,21 @@ const ChatInterface: React.FC = () => {
 
         const aiResponseId = (Date.now() + 1).toString();
         try {
-            setMessages(prev => [...prev, { id: aiResponseId, text: '...', sender: 'ai' }]);
+            setMessages(prev => [...prev, { id: aiResponseId, text: `Querying ${activeModel.modelId}...`, sender: 'ai', huggingFaceData: { type: 'modelQuery', query: { model: activeModel.modelId, prompt: userMessage.text }, result: null } }]);
             const result = await hfService.queryModel(activeModel.modelId, userMessage.text);
+             if (isVoiceEnabled) speakText("Response received from Hugging Face model.");
             setMessages(prev => prev.map(m => m.id === aiResponseId ? {
                 ...m,
-                text: '', // Response is rendered by HuggingFaceResult component
+                text: 'Hugging Face operation complete, Captain.',
                 huggingFaceData: { type: 'modelQuery', query: { model: activeModel.modelId, prompt: userMessage.text }, result }
             } : m));
         } catch (error: any) {
             const errorMessage = error.message || 'An unknown error occurred.';
+            const failureText = `Hugging Face operation failed.`;
+            if (isVoiceEnabled) speakText(failureText);
             setMessages(prev => prev.map(m => m.id === aiResponseId ? {
                  ...m,
-                 text: `Hugging Face operation failed.`,
+                 text: failureText,
                  huggingFaceData: { type: 'modelQuery', query: { model: activeModel.modelId, prompt: userMessage.text }, result: null, error: errorMessage }
             } : m));
         } finally {
@@ -236,7 +441,6 @@ const ChatInterface: React.FC = () => {
         return;
     }
 
-    // Default Gemini and command-based logic
     const messageAttachments: Attachment[] = attachments.map(file => ({ name: file.name, type: file.type }));
     const userMessage: Message = { id: Date.now().toString(), text: userMessageText, sender: 'user', attachments: messageAttachments };
     setMessages((prev) => [...prev, userMessage]);
@@ -244,87 +448,73 @@ const ChatInterface: React.FC = () => {
     setAttachments([]);
     setIsLoading(true);
 
+    const aiResponseId = (Date.now() + 1).toString();
+    
     try {
       if (userMessageText.startsWith(hfPrefix)) {
           await handleHuggingFaceCommand(userMessageText);
       } else if (userMessageText.startsWith(imagePromptPrefix)) {
           const prompt = userMessageText.substring(imagePromptPrefix.length);
-          const aiResponseId = (Date.now() + 1).toString();
           setMessages(prev => [...prev, { id: aiResponseId, text: "Forging image...", sender: 'ai', media: { type: 'image', prompt, status: 'generating', url: '' } }]);
           const imageUrl = await generateImageFromAI(prompt);
-          setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "Image generation complete.", media: { type: 'image', prompt, status: 'complete', url: imageUrl } } : m));
+          const successText = "Image generation complete.";
+          if (isVoiceEnabled) speakText(successText);
+          setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: successText, media: { type: 'image', prompt, status: 'complete', url: imageUrl } } : m));
       } else if (userMessageText.startsWith(videoPromptPrefix)) {
           const prompt = userMessageText.substring(videoPromptPrefix.length);
-          const aiResponseId = (Date.now() + 1).toString();
           setMessages(prev => [...prev, { id: aiResponseId, text: "Synthesizing video...", sender: 'ai', media: { type: 'video', prompt, status: 'generating', url: '' } }]);
           const videoUrl = await generateVideoFromAI(prompt);
-          setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "Video synthesis complete.", media: { type: 'video', prompt, status: 'complete', url: videoUrl } } : m));
+          const successText = "Video synthesis complete.";
+          if (isVoiceEnabled) speakText(successText);
+          setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: successText, media: { type: 'video', prompt, status: 'complete', url: videoUrl } } : m));
       } else if (userMessageText.startsWith(audioPromptPrefix)) {
           const prompt = userMessageText.substring(audioPromptPrefix.length);
-          const aiResponseId = (Date.now() + 1).toString();
           setMessages(prev => [...prev, { id: aiResponseId, text: "Synthesizing audio...", sender: 'ai', media: { type: 'audio', prompt, status: 'generating', url: '' } }]);
           const audioUrl = await generateAudioFromAI(prompt);
-          setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "Sonic synthesis complete.", media: { type: 'audio', prompt, status: 'complete', url: audioUrl } } : m));
-      } else if (userMessageText.trim().startsWith(ghostCodePrefix)) {
-        const parts = userMessageText.split('|').map(p => p.trim());
-        const params: Record<string, string> = {};
-        parts.slice(1).forEach(part => {
-            const [key, ...valueParts] = part.split(':');
-            if (key && valueParts.length > 0) {
-                params[key.trim().toLowerCase()] = valueParts.join(':').trim();
-            }
-        });
-
-        const lang = params.lang || 'javascript';
-        const request = params.request;
-
-        if (!request || request === '[description of code]') {
-            throw new Error("Missing 'request' parameter for Ghost Code protocol. Please describe the code you need.");
-        }
-        
-        const generationPrompt = `Generate a code snippet for the following request.\nLanguage: ${lang}\nRequest: "${request}"\n\nIMPORTANT: Only output the raw code, wrapped in a markdown code block for the specified language. Do not add any explanatory text, introduction, or conclusion.`;
-        
-        const aiMessageParts = [{ text: generationPrompt }];
-        const aiResponseId = (Date.now() + 1).toString();
-        setMessages((prev) => [...prev, { id: aiResponseId, text: '', sender: 'ai' }]);
-        
-        const stream = await sendMessageToAI([...messages, userMessage], aiMessageParts);
-
-        let fullResponse = '';
-        for await (const chunk of stream) {
-          fullResponse += chunk.text;
-          setMessages((prev) => prev.map((msg) => msg.id === aiResponseId ? { ...msg, text: fullResponse } : msg));
-        }
-
-        const commandRegex = /\[FUX_STATE:(.*?)\]$/;
-        const match = fullResponse.match(commandRegex);
-        let messageToDisplay = fullResponse;
-        if (match && match[1]) {
-          try {
-            const command = JSON.parse(match[1]);
-            if (command.theme) setTheme(command.theme as Theme);
-          } catch (e) { console.error("Failed to parse FUX_STATE command:", e); }
-          messageToDisplay = fullResponse.replace(commandRegex, '').trim();
-        }
-        setMessages((prev) => prev.map((msg) => msg.id === aiResponseId ? { ...msg, text: messageToDisplay } : msg));
-
+          const successText = "Sonic synthesis complete.";
+          if (isVoiceEnabled) speakText(successText);
+          setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: successText, media: { type: 'audio', prompt, status: 'complete', url: audioUrl } } : m));
       } else {
         const parts: any[] = [];
-        if (userMessageText.trim()) parts.push({ text: userMessageText.trim() });
+        let generationPrompt = userMessageText.trim();
+
+        if (userMessageText.trim().startsWith(ghostCodePrefix)) {
+            const ghostParts = userMessageText.split('|').map(p => p.trim());
+            const params: Record<string, string> = {};
+            ghostParts.slice(1).forEach(part => {
+                const [key, ...valueParts] = part.split(':');
+                if (key && valueParts.length > 0) {
+                    params[key.trim().toLowerCase()] = valueParts.join(':').trim();
+                }
+            });
+
+            const lang = params.lang || 'javascript';
+            const request = params.request;
+
+            if (!request || request === '[description of code]') {
+                throw new Error("Missing 'request' parameter for Ghost Code protocol. Please describe the code you need.");
+            }
+            generationPrompt = `Generate a code snippet for the following request.\nLanguage: ${lang}\nRequest: "${request}"\n\nIMPORTANT: Only output the raw code, wrapped in a markdown code block for the specified language. Do not add any explanatory text, introduction, or conclusion.`;
+        }
+        
+        if (generationPrompt) parts.push({ text: generationPrompt });
+        
         if (attachments.length > 0) {
             const fileParts = await Promise.all(attachments.map(async (file) => ({
                 inlineData: { mimeType: file.type || 'application/octet-stream', data: await fileToBase64(file) }
             })));
             parts.push(...fileParts);
         }
-        const aiResponseId = (Date.now() + 1).toString();
-        setMessages((prev) => [...prev, { id: aiResponseId, text: '', sender: 'ai' }]);
+
+        setMessages((prev) => [...prev, { id: aiResponseId, text: '', sender: 'ai', status: 'generating' }]);
         const stream = await sendMessageToAI([...messages, userMessage], parts);
+        
         let fullResponse = '';
         for await (const chunk of stream) {
           fullResponse += chunk.text;
           setMessages((prev) => prev.map((msg) => msg.id === aiResponseId ? { ...msg, text: fullResponse } : msg));
         }
+
         const commandRegex = /\[FUX_STATE:(.*?)\]$/;
         const match = fullResponse.match(commandRegex);
         let messageToDisplay = fullResponse;
@@ -335,37 +525,144 @@ const ChatInterface: React.FC = () => {
           } catch (e) { console.error("Failed to parse FUX_STATE command:", e); }
           messageToDisplay = fullResponse.replace(commandRegex, '').trim();
         }
-        setMessages((prev) => prev.map((msg) => msg.id === aiResponseId ? { ...msg, text: messageToDisplay } : msg));
+        if (isVoiceEnabled) speakText(messageToDisplay);
+        setMessages((prev) => prev.map((msg) => msg.id === aiResponseId ? { ...msg, text: messageToDisplay, status: 'complete' } : msg));
       }
     } catch (error) {
       console.error('Error in handleSend:', error);
-      const errorId = (Date.now() + 1).toString();
       const errorText = error instanceof Error ? error.message : 'An unknown error occurred.';
-      const errorMessage = { id: errorId, text: `Sorry, Captain. I encountered an error: ${errorText}`, sender: 'ai' as const };
+      const errorMessageText = `Sorry, Captain. I encountered an error: ${errorText}`;
+      if (isVoiceEnabled) speakText(errorMessageText);
       setMessages(prev => {
-        const lastMsg = prev[prev.length - 1];
-        if (lastMsg.sender === 'ai' && (lastMsg.media?.status === 'generating' || lastMsg.huggingFaceData || lastMsg.text === '...' || lastMsg.text === '')) {
-            if (lastMsg.media) return prev.map(m => m.id === lastMsg.id ? { ...m, text: "Generation failed.", media: { ...m.media!, status: 'error' } } : m);
-            if (lastMsg.huggingFaceData) return prev.map(m => m.id === lastMsg.id ? { ...m, text: `Hugging Face operation failed.`, huggingFaceData: { ...m.huggingFaceData!, error: (error as Error).message } } : m)
-            return prev.map(m => m.id === lastMsg.id ? errorMessage : m);
+        const lastMsg = prev.find(m => m.id === aiResponseId);
+        if (lastMsg) {
+            return prev.map(m => {
+                if (m.id === aiResponseId) {
+                    const updatedMessage = { ...m, status: 'error' as const, text: errorMessageText };
+                    if (m.media) updatedMessage.media = { ...m.media, status: 'error' as const };
+                    if (m.huggingFaceData) updatedMessage.huggingFaceData = { ...m.huggingFaceData, error: errorText };
+                    return updatedMessage;
+                }
+                return m;
+            });
         }
-        return [...prev, errorMessage];
+        return [...prev, { id: aiResponseId, text: errorMessageText, sender: 'ai', status: 'error' }];
       });
     } finally {
       setIsLoading(false);
     }
-  }, [input, isLoading, attachments, messages, isOnline, setTheme, activeModel]);
+  }, [input, isLoading, attachments, messages, isOnline, setTheme, activeModel, isVoiceEnabled, speakText]);
+
+  useEffect(() => {
+    if (sendAfterCaptureRef.current) {
+        handleSend();
+        sendAfterCaptureRef.current = false;
+    }
+  }, [attachments, input, handleSend]);
+
+  const handleCameraCapture = (file: File) => {
+    setAttachments([file]);
+    setInput("Analyze this frame from my visual feed, Captain.");
+    setIsCameraOpen(false);
+    sendAfterCaptureRef.current = true;
+  };
+  
+  const handleHuggingFaceCommand = async (commandString: string) => {
+    const aiResponseId = (Date.now() + 1).toString();
+    let type: any, query: Record<string, any> = {}, loadingText: string;
+
+    try {
+        const parts = commandString.split('|').map(p => p.trim());
+        const commandPart = parts[0];
+        const params: Record<string, string> = {};
+        parts.slice(1).forEach(part => {
+            const [key, ...valueParts] = part.split(':');
+            if (key && valueParts.length > 0) {
+                params[key.trim()] = valueParts.join(':').trim();
+            }
+        });
+
+        if (commandPart === 'HF LLM Search') {
+            type = 'modelSearch';
+            if (!params.query) throw new Error("Missing 'query' parameter for LLM Search.");
+            query = { query: params.query };
+            loadingText = `Searching for models matching: \`${params.query}\`...`;
+        } else if (commandPart === 'HF Model Query') {
+            type = 'modelQuery';
+            if (!params.model || !params.prompt) throw new Error("Missing 'model' or 'prompt' parameter for Model Query.");
+            query = { model: params.model, prompt: params.prompt };
+            loadingText = `Querying model: \`${params.model}\`...`;
+        } else if (commandPart === 'HF Space Explorer' || commandPart === 'HF Cache Space') {
+            type = 'spaceInfo';
+            if (!params.space) throw new Error(`Missing 'space' parameter for ${commandPart}.`);
+            query = { space: params.space };
+            loadingText = commandPart === 'HF Space Explorer' 
+                ? `Exploring Space: \`${params.space}\`...` 
+                : `Attempting to cache intel for Space: \`${params.space}\`...`;
+        } else {
+            throw new Error('Unknown Hugging Face command.');
+        }
+
+        setMessages(prev => [...prev, {
+            id: aiResponseId,
+            text: loadingText,
+            sender: 'ai',
+            huggingFaceData: { type, query, result: null }
+        }]);
+
+        let result: any;
+        if (commandPart === 'HF LLM Search') {
+            result = await hfService.searchModels(params.query);
+        } else if (commandPart === 'HF Model Query') {
+            result = await hfService.queryModel(params.model, params.prompt);
+            setActiveModel({ type: 'huggingface', modelId: params.model });
+        } else if (commandPart === 'HF Space Explorer') {
+            result = await hfService.getSpaceInfo(params.space, false);
+        } else if (commandPart === 'HF Cache Space') {
+            result = await hfService.getSpaceInfo(params.space, true);
+        }
+
+        const successText = commandPart === 'HF Cache Space'
+            ? `Intel for \`${params.space}\` has been successfully cached for offline use.`
+            : `Hugging Face operation complete, Captain.`;
+        
+        if (isVoiceEnabled) speakText(successText);
+
+        setMessages(prev => prev.map(m => m.id === aiResponseId ? {
+             ...m,
+             text: successText,
+             huggingFaceData: { type, query, result }
+        } : m));
+
+    } catch (error: any) {
+        console.error('Hugging Face command failed:', error);
+        const failureText = `Hugging Face operation failed, Captain.`;
+        if (isVoiceEnabled) speakText(failureText);
+        const errorMessage = error.message || 'An unknown error occurred.';
+        setMessages(prev => {
+            const existingMsg = prev.find(m => m.id === aiResponseId);
+            if (existingMsg) {
+                return prev.map(m => m.id === aiResponseId ? {
+                     ...m,
+                     text: failureText,
+                     huggingFaceData: { type, query, result: null, error: errorMessage }
+                } : m);
+            }
+            return [...prev, {
+                id: aiResponseId,
+                sender: 'ai',
+                text: failureText,
+                huggingFaceData: { type, query, result: null, error: errorMessage }
+            }];
+        });
+    }
+  };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
-  };
-
-  const handleVision = () => {
-    setInput("[Visual Cortex Activated] Analyze the current state of the application's interface and report your findings, co-pilot.");
-    setTimeout(() => handleSend(), 0); 
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -379,18 +676,55 @@ const ChatInterface: React.FC = () => {
     setIsDragging(false);
     if (e.dataTransfer.files) setAttachments(prev => [...prev, ...Array.from(e.dataTransfer.files)]);
   };
+  
+  const LiveStatusDisplay = () => {
+    let statusText = "Live Conversation Active";
+    let pulse = true;
+    switch (liveStatus) {
+      case 'connecting': statusText = "Connecting..."; break;
+      case 'error': statusText = "Connection Error. Retry?"; pulse = false; break;
+      case 'active': statusText = "Listening..."; break;
+    }
+
+    const transcriptEndRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+      transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [liveTranscripts]);
+
+    return (
+      <div className="w-full flex flex-col bg-layer-1 border border-layer-3 rounded-lg p-3 h-[120px] text-gray-200 font-mono text-sm">
+        <div className={`flex items-center space-x-2 text-primary mb-2 flex-shrink-0 ${pulse ? 'animate-pulse' : ''}`}>
+          <MicrophoneIcon />
+          <span>{statusText}</span>
+        </div>
+        <div className="w-full text-xs text-secondary flex-1 overflow-y-auto pr-2 min-h-0">
+          {liveTranscripts.user && (
+            <div className="flex items-start gap-2 mb-1">
+              <span className="font-bold text-gray-400 flex-shrink-0">Captain:</span>
+              <p className="flex-1 break-words whitespace-pre-wrap">{liveTranscripts.user}</p>
+            </div>
+          )}
+          {liveTranscripts.ai && (
+            <div className="flex items-start gap-2">
+              <span className="font-bold text-primary flex-shrink-0">FuXStiXX:</span>
+              <p className="flex-1 break-words whitespace-pre-wrap">{liveTranscripts.ai}</p>
+            </div>
+          )}
+          <div ref={transcriptEndRef} />
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div 
-      className={`flex flex-col h-full bg-base p-4 transition-all duration-200 ${isDragging ? 'outline-dashed outline-2 outline-offset-[-8px] outline-primary' : ''}`}
+      className={`relative flex flex-col h-full bg-base p-4 transition-all duration-200 ${isDragging ? 'outline-dashed outline-2 outline-offset-[-8px] outline-primary' : ''}`}
       onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
     >
+      {isCameraOpen && <CameraView onClose={() => setIsCameraOpen(false)} onCapture={handleCameraCapture} />}
       <div className="flex-1 overflow-y-auto pr-2">
         <div className="space-y-6">
           {messages.map((msg) => <ChatMessage key={msg.id} message={msg} />)}
-          {isLoading && messages[messages.length-1]?.sender === 'user' && (
-             <ChatMessage key="loading" message={{id: 'loading', sender: 'ai', text: '...'}} />
-          )}
         </div>
         <div ref={chatEndRef} />
       </div>
@@ -434,25 +768,41 @@ const ChatInterface: React.FC = () => {
                 <div className="absolute left-3 flex items-center">
                     <button
                         ref={powersButtonRef} onClick={() => setIsPowersOpen(prev => !prev)}
-                        disabled={isLoading || !isOnline}
+                        disabled={isLoading || !isOnline || liveStatus !== 'idle'}
                         className="p-2 rounded-full text-secondary disabled:text-layer-3 disabled:cursor-not-allowed hover:text-primary transition-colors duration-200"
                         aria-label="Access Powers" title="Access Powers"
                     > <ZapIcon /> </button>
                 </div>
-                <textarea ref={textAreaRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyPress={handleKeyPress}
-                    placeholder={isOnline ? "Command your co-pilot..." : "System is offline..."}
-                    className="w-full bg-layer-1 border border-layer-3 rounded-lg p-3 pl-12 pr-32 text-gray-200 focus:outline-none focus:ring-2 focus:ring-accent resize-none font-mono text-sm disabled:opacity-50"
-                    rows={1} disabled={isLoading || !isOnline} />
+
+                {liveStatus !== 'idle' ? <LiveStatusDisplay /> : (
+                  <textarea ref={textAreaRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyPress={handleKeyPress}
+                      placeholder={isOnline ? "Command your co-pilot..." : "System is offline..."}
+                      className="w-full bg-layer-1 border border-layer-3 rounded-lg p-3 pl-12 pr-48 text-gray-200 focus:outline-none focus:ring-2 focus:ring-accent resize-none font-mono text-sm disabled:opacity-50"
+                      rows={1} disabled={isLoading || !isOnline} />
+                )}
+
                 <div className="absolute right-3 flex items-center space-x-1">
-                    <button onClick={() => fileInputRef.current?.click()} disabled={isLoading || !isOnline} className="p-2 rounded-full text-secondary disabled:text-layer-3 disabled:cursor-not-allowed hover:text-primary transition-colors duration-200" aria-label="Attach files" title="Attach files">
-                        <PaperclipIcon />
+                    {liveStatus === 'idle' && (
+                        <>
+                            <button onClick={() => fileInputRef.current?.click()} disabled={isLoading || !isOnline} className="p-2 rounded-full text-secondary disabled:text-layer-3 disabled:cursor-not-allowed hover:text-primary transition-colors duration-200" aria-label="Attach files" title="Attach files">
+                                <PaperclipIcon />
+                            </button>
+                            <button onClick={() => setIsCameraOpen(true)} disabled={isLoading || !isOnline} className="p-2 rounded-full text-secondary disabled:text-layer-3 disabled:cursor-not-allowed hover:text-primary transition-colors duration-200" aria-label="Activate Live Vision" title="Activate Live Vision">
+                                <CameraIcon />
+                            </button>
+                            <button onClick={() => setIsVoiceEnabled(prev => !prev)} className={`p-2 rounded-full transition-colors duration-200 ${isVoiceEnabled ? 'text-primary' : 'text-secondary'} disabled:text-layer-3 disabled:cursor-not-allowed hover:text-primary`} aria-label="Toggle Voice Output" title="Toggle Voice Output">
+                                {isVoiceEnabled ? <SpeakerOnIcon /> : <SpeakerOffIcon />}
+                            </button>
+                        </>
+                    )}
+                     <button onClick={handleToggleLive} disabled={!isOnline || isLoading} className={`p-2 rounded-full transition-colors duration-200 ${liveStatus !== 'idle' ? 'text-danger animate-pulse' : 'text-secondary'} disabled:text-layer-3 disabled:cursor-not-allowed hover:text-primary`} aria-label={liveStatus !== 'idle' ? "End Live Conversation" : "Start Live Conversation"} title={liveStatus !== 'idle' ? "End Live Conversation" : "Start Live Conversation"}>
+                        <MicrophoneIcon />
                     </button>
-                    <button onClick={handleVision} disabled={isLoading || !isOnline} className="p-2 rounded-full text-secondary disabled:text-layer-3 disabled:cursor-not-allowed hover:text-primary transition-colors duration-200" aria-label="Activate Visual Cortex" title="Activate Visual Cortex">
-                        <CameraIcon />
-                    </button>
-                    <button onClick={() => handleSend()} disabled={isLoading || !isOnline || (!input.trim() && attachments.length === 0)} className="p-2 rounded-full bg-accent text-black disabled:bg-layer-3 disabled:text-secondary disabled:cursor-not-allowed hover:bg-primary transition-colors duration-200" aria-label="Send message">
-                        <SendIcon />
-                    </button>
+                    {liveStatus === 'idle' && (
+                      <button onClick={() => handleSend()} disabled={isLoading || !isOnline || (!input.trim() && attachments.length === 0)} className="p-2 rounded-full bg-accent text-black disabled:bg-layer-3 disabled:text-secondary disabled:cursor-not-allowed hover:bg-primary transition-colors duration-200" aria-label="Send message">
+                          <SendIcon />
+                      </button>
+                    )}
                 </div>
             </div>
             {isPowersOpen && <div ref={powersDropdownRef}><PowersDropdown onPowerClick={handlePowerClick} onClose={() => setIsPowersOpen(false)} /></div>}
@@ -461,6 +811,6 @@ const ChatInterface: React.FC = () => {
        <input type="file" ref={fileInputRef} onChange={handleFileSelect} multiple className="hidden" accept="image/*,video/*,application/zip,application/x-zip-compressed,multipart/x-zip,.md,.txt,.py,.js,.ts,.html,.css,.json" />
     </div>
   );
-};
+});
 
 export default ChatInterface;

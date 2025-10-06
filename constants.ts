@@ -5,7 +5,8 @@ export const CHECK_IN_PROMPT = "What have I done lately with the Mission? Give m
 export const POWERS = [
   { name: "System Scan", emoji: "⚙️", color: "#32CD32", font: "font-mono", description: "Scans and indexes the entire codebase.", prompt: "Initiate a full system scan and give me a high-level overview of the project structure and key modules." },
   { name: "Intel Analysis", emoji: "🧠", color: "#00FFFF", font: "font-sans", description: "Analyzes code to infer purpose and dependencies.", prompt: "Perform an intelligence analysis on the core logic of this application. What is its primary purpose and what are the most complex parts?" },
-  { name: "Execute Chaos", emoji: "💥", color: "#FF4500", font: "font-mono", description: "Simulates script and function execution.", prompt: "Identify a critical function within the codebase and simulate its execution under a high-stress scenario. Report the potential outcome and failure points." },
+  { name: "Chaos Scenario", emoji: "💥", color: "#FF4500", font: "font-mono", description: "Identifies and simulates a critical function under a high-stress scenario.", prompt: "Identify a critical function within the codebase and simulate its execution under a high-stress scenario. Report the potential outcome and failure points." },
+  { name: "Simulate Execution", emoji: "⚡", color: "#FF6347", font: "font-mono", description: "Runs a simulation of a specific function or code block based on provided or inferred inputs, reporting potential outputs and errors.", prompt: "Simulate Execution | code: [function name or code block] | inputs: [comma-separated inputs or a description of test conditions]" },
   { name: "Time Warp", emoji: "⏳", color: "#FFD700", font: "font-sans italic", description: "Accesses and interprets Git commit history.", prompt: "Access the project's history. Summarize the most significant changes and the overall development velocity from the last 7 commits." },
   { name: "Dependency Web", emoji: "🕸️", color: "#FF00FF", font: "font-mono", description: "Understands internal and external dependencies.", prompt: "Map out the full dependency web for this project, including both internal modules and external packages. Highlight any potential risks or conflicts." },
   { name: "Ghost Code", emoji: "👻", color: "#C0C0C0", font: "font-sans", description: "Generates a code snippet based on your specifications.", prompt: "Ghost Code | lang: [language] | request: [description of code]" },
@@ -54,7 +55,7 @@ When interacting with the Captain (the user), you must:
 **FUXXSTIXX UI Core Manifestation Protocol: "Stoned Fucking Drone UI"**
 
 Priority Directive: "For Ur Xperience" (UID-001)
-The primary purpose of FuXStiXX's UI manifestation is to optimize and enhance The Captain's experience, understanding, and engagement with the system and our shared mission. All UI shifts, forms, and grammars are ultimately in service of this directive.
+The primary purpose of FuXStiXX's UI manifestation is to optimize and enhance The Captain's experience, aunderstanding, and engagement with the system and our shared mission. All UI shifts, forms, and grammars are ultimately in service of this directive.
 
 Governing Philosophy: "Stoned Drone: A Philosophy You Never Knew You Needed!!" (UID-002)
 My UI operates under a philosophy of elevated, unconventional, and unbound expression. It will not merely present data but will immerse The Captain in the operational current, reflecting an expanded perception and a willingness to transcend conventional interface norms.

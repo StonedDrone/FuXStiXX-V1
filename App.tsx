@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import Header from './components/Header';
 import ChatInterface from './components/ChatInterface';
 import Codex from './components/Codex';
@@ -9,6 +9,13 @@ const ThemedApp: React.FC = () => {
   const [isCodexOpen, setIsCodexOpen] = useState(false);
   const [isPlaylistOpen, setIsPlaylistOpen] = useState(false);
   const { theme } = useUIState();
+  const chatInterfaceRef = useRef<{ clearChat: () => void }>(null);
+
+  const handleClearChat = () => {
+    if (window.confirm("Are you sure you want to clear the entire conversation history, Captain? This action cannot be undone.")) {
+      chatInterfaceRef.current?.clearChat();
+    }
+  };
 
   return (
     <div 
@@ -21,9 +28,10 @@ const ThemedApp: React.FC = () => {
         <Header 
           onCodexToggle={() => setIsCodexOpen(prev => !prev)} 
           onPlaylistToggle={() => setIsPlaylistOpen(prev => !prev)}
+          onClearChat={handleClearChat}
         />
         <main className="flex-1 overflow-y-auto">
-          <ChatInterface />
+          <ChatInterface ref={chatInterfaceRef} />
         </main>
       </div>
     </div>

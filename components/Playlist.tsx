@@ -62,7 +62,7 @@ const Playlist: React.FC<PlaylistProps> = ({ isOpen, onClose }) => {
 
     const handleImportPlaylist = () => {
         savePlaylist(MOCK_PLAYLIST);
-        alert("Mission Jams playlist has been loaded, Captain. This is a simulation of a Spotify data import.");
+        alert("Mission Jams playlist has been loaded, Captain. My audio acquisition protocols, upgraded with intel from 'spotify-dl' and 'smd', have simulated a high-fidelity data import.");
     };
 
     const setupAudioContext = () => {

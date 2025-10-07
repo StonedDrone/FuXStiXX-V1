@@ -130,6 +130,9 @@ const ObjectDetectionView: React.FC<ObjectDetectionViewProps> = ({ onClose, onRe
                 <button onClick={onClose} className="absolute top-2 right-2 p-2 rounded-full bg-base/50 text-secondary hover:bg-base transition-colors z-10">
                     <XIcon />
                 </button>
+                 <div className="absolute bottom-2 right-2 bg-base/50 text-secondary text-[10px] font-mono px-2 py-0.5 rounded pointer-events-none">
+                    YOLOv5 Architecture
+                </div>
             </div>
             <div className="mt-6 flex items-center space-x-6">
                 <button onClick={onClose} className="px-6 py-3 bg-layer-2 border border-layer-3 rounded-lg text-sm font-bold text-secondary hover:bg-layer-3 transition-colors">

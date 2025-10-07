@@ -46,7 +46,7 @@ const Settings: React.FC<SettingsProps> = ({ isOpen, onClose, onActivate }) => {
                     <div className="mb-6">
                         <h3 className="font-mono text-xl text-secondary mb-3">Local LLM Connection</h3>
                         <p className="text-sm text-gray-400 mb-4">
-                            Connect to an OpenAI-compatible API, such as one provided by LM Studio or Ollama.
+                            Connect to an OpenAI-compatible API, such as those provided by LM Studio, Ollama, or LocalAI.
                         </p>
                         
                         <div className="space-y-4">

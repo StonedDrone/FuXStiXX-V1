@@ -22,13 +22,18 @@ const VRSceneViewer: React.FC<VRSceneViewerProps> = ({ sceneHtml }) => {
   `;
 
   return (
-    <iframe
-      srcDoc={srcDoc}
-      title="VR Scene"
-      className="w-full aspect-video border-2 border-layer-3 rounded-lg bg-black"
-      allow="fullscreen; vr"
-      sandbox="allow-scripts"
-    />
+    <div className="relative">
+      <iframe
+        srcDoc={srcDoc}
+        title="VR Scene"
+        className="w-full aspect-video border-2 border-layer-3 rounded-lg bg-black"
+        allow="fullscreen; vr"
+        sandbox="allow-scripts"
+      />
+      <div className="absolute bottom-2 right-2 bg-base/50 text-secondary text-[10px] font-mono px-2 py-0.5 rounded pointer-events-none">
+        A-Frame VR Engine
+      </div>
+    </div>
   );
 };
 

@@ -1,10 +1,11 @@
 
 
+
 import React, { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { GoogleGenAI, Blob, LiveServerMessage, Modality } from "@google/genai";
 import { Message, Attachment, ActiveModel, DAG, LiveStreamState, HexDumpData } from '../types';
 import { CHECK_IN_PROMPT } from '../constants';
-import { sendMessageToAI, generateImageFromAI, generateVideoFromAI, generateAudioFromAI, resetChat, transcribeAudio, generateVRSceneFromAI, editImageFromAI, synthesizeNeRFFromImages, generateCreativeCodeFromAI, generateUIMockupFromAI, generateMotionFXFromAI, generateAlgorithmVisualizationFromAI, generateUserSimulationFromAI } from '../services/geminiService';
+import { sendMessageToAI, generateImageFromAI, generateVideoFromAI, generateAudioFromAI, resetChat, transcribeAudio, generateVRSceneFromAI, editImageFromAI, synthesizeNeRFFromImages, generateCreativeCodeFromAI, generateUIMockupFromAI, generateMotionFXFromAI, generateAlgorithmVisualizationFromAI, generateUserSimulationFromAI, generateIconFromAI, performDensePoseAnalysis, generate3DModelFromImage, generateGaussianDreamFromText } from '../services/geminiService';
 import * as hfService from '../services/huggingFaceService';
 import * as lmStudioService from '../services/lmStudioService';
 import * as financialService from '../services/financialService';
@@ -13,6 +14,7 @@ import * as streamingService from '../services/streamingService';
 import * as knowledgeService from '../services/knowledgeService';
 import * as analysisService from '../services/analysisService';
 import * as liveSyncService from '../services/liveSyncService';
+import * as vectorDroneService from '../services/vectorDroneService';
 import ChatMessage from './ChatMessage';
 import { SendIcon } from './icons/SendIcon';
 import { CameraIcon } from './icons/CameraIcon';
@@ -511,6 +513,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     const imageAlchemyPrefix = "Image Alchemy |";
     const videoPromptPrefix = "Generate a video of: ";
     const audioPromptPrefix = "Generate music of: ";
+    const iconForgePrefix = "Icon Forge |";
     const vrScenePromptPrefix = "Generate a VR scene of: ";
     const creativeCodePromptPrefix = "Generate a creative code sketch of: ";
     const uiMockupPromptPrefix = "Generate a UI mockup for: ";
@@ -519,13 +522,16 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     const userSimPromptPrefix = "Simulate user journey for: ";
     const devRoadmapPromptPrefix = "Generate a dev roadmap for: ";
     const realityForgePrefix = "Reality Forge";
+    const magic3DPrefix = "3D Magic";
+    const gaussianDreamPrefix = "Gaussian Dream |";
     const transcribeAudioPrefix = "Transcribe Audio";
     const ghostCodePrefix = "Ghost Code |";
     const financialPrefixes = ["Market Pulse |", "Sector Intel |", "Crypto Scan |", "Alpha Signal |"];
-    const analysisPrefixes = ["Neural Cartography |", "Visualize algorithm: ", "Simulate user journey for: ", "Design Deconstruction |", "Binary Scan"];
+    const analysisPrefixes = ["Neural Cartography |", "Visualize algorithm: ", "Simulate user journey for: ", "Design Deconstruction |", "Binary Scan", "Dense Scan"];
     const automationPrefixes = ["Define DAG |", "Trigger DAG |", "DAG Status", "Clear All DAGs"];
     const streamingPrefixes = ["Live Intel Stream |", "Stop Intel Stream", "Screen Stream", "Engage Live Sync", "Disengage Live Sync"];
     const knowledgePrefixes = ["Index Source |", "Query Intel Base |", "Intel Base Status", "Purge Intel Base"];
+    const vectorDronePrefixes = ["Vector Status", "Vector Roam |", "Vector Say |"];
 
     const messageAttachments: Attachment[] = attachments.map(file => ({ name: file.name, type: file.type }));
     const userMessage: Message = { id: Date.now().toString(), text: userMessageText, sender: 'user', attachments: messageAttachments };
@@ -568,6 +574,9 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
       } else if (knowledgePrefixes.some(prefix => userMessageText.startsWith(prefix))) {
             await handleKnowledgeCommand(userMessage);
 
+      } else if (vectorDronePrefixes.some(prefix => userMessageText.startsWith(prefix))) {
+            await handleVectorDroneCommand(userMessageText);
+
       } else if (userMessageText.startsWith(transcribeAudioPrefix)) {
           if (attachments.length === 0 || !attachments[0].type.startsWith('audio/')) {
               throw new Error("Please attach an audio file to use the Transcribe Audio power.");
@@ -577,6 +586,23 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
           const transcription = await transcribeAudio(audioFile);
           if (isVoiceEnabled) speakText("Transcription complete.");
           setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "Transcription complete, Captain.", transcriptionData: { fileName: audioFile.name, transcription } } : m));
+      
+      } else if (userMessageText.startsWith(gaussianDreamPrefix)) {
+            const { params } = parseCommand(userMessageText);
+            if (!params.prompt) throw new Error("Missing 'prompt' parameter for Gaussian Dream.");
+            setMessages(prev => [...prev, { id: aiResponseId, text: "Dreaming with Gaussian Splats...", sender: 'ai', media: { type: 'gaussianDream', prompt: params.prompt, status: 'generating', progress: 0 } }]);
+            
+            const onProgress = (progress: number, status: string) => {
+                setMessages(prev => prev.map(m => 
+                    (m.id === aiResponseId && m.media)
+                    ? { ...m, text: status, media: { ...m.media, progress } } 
+                    : m
+                ));
+            };
+
+            const modelScene = await generateGaussianDreamFromText(params.prompt, onProgress);
+            if (isVoiceEnabled) speakText("Gaussian Dream synthesis complete.");
+            setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "Gaussian Dream synthesis complete.", media: { ...m.media, status: 'complete', content: modelScene } } : m));
       
       } else if (userMessageText.startsWith(imageAlchemyPrefix)) {
           if (attachments.length === 0 || !attachments[0].type.startsWith('image/')) {
@@ -618,6 +644,14 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
           if (isVoiceEnabled) speakText("Sonic synthesis complete.");
           setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "Sonic synthesis complete.", media: { type: 'audio', prompt, status: 'complete', url: audioUrl } } : m));
       
+      } else if (userMessageText.startsWith(iconForgePrefix)) {
+          const { params } = parseCommand(userMessageText);
+          if (!params.brand) throw new Error("Missing 'brand' parameter for Icon Forge.");
+          setMessages(prev => [...prev, { id: aiResponseId, text: `Forging icon for ${params.brand}...`, sender: 'ai', media: { type: 'icon', prompt: params.brand, status: 'generating' } }]);
+          const iconSvg = await generateIconFromAI(params.brand);
+          if (isVoiceEnabled) speakText("Icon forged.");
+          setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: `Icon for ${params.brand} forged.`, media: { type: 'icon', prompt: params.brand, status: 'complete', content: iconSvg } } : m));
+
       } else if (userMessageText.startsWith(vrScenePromptPrefix)) {
           const prompt = userMessageText.substring(vrScenePromptPrefix.length);
           setMessages(prev => [...prev, { id: aiResponseId, text: "Forging VR scene...", sender: 'ai', media: { type: 'vr', prompt, status: 'generating' } }]);
@@ -654,6 +688,25 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
           const sceneHtml = await synthesizeNeRFFromImages(attachments);
           if (isVoiceEnabled) speakText("Reality Forge synthesis complete.");
           setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "Reality Forge synthesis complete.", media: { type: 'vr', prompt: userMessageText, status: 'complete', content: sceneHtml } } : m));
+      
+      } else if (userMessageText.startsWith(magic3DPrefix)) {
+          if (attachments.length === 0 || !attachments[0].type.startsWith('image/')) {
+              throw new Error("3D Magic requires a single attached image, Captain.");
+          }
+          const imageFile = attachments[0];
+          setMessages(prev => [...prev, { id: aiResponseId, text: "Initiating 3D synthesis...", sender: 'ai', media: { type: 'magic3d', prompt: userMessageText, status: 'generating', progress: 0 } }]);
+          
+          const onProgress = (progress: number) => {
+              setMessages(prev => prev.map(m => 
+                  (m.id === aiResponseId && m.media)
+                  ? { ...m, media: { ...m.media, progress } } 
+                  : m
+              ));
+          };
+
+          const modelScene = await generate3DModelFromImage(imageFile, onProgress);
+          if (isVoiceEnabled) speakText("3D model synthesis complete.");
+          setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "3D model synthesis complete.", media: { ...m.media, status: 'complete', content: modelScene } } : m));
 
       } else {
         const parts: any[] = [];
@@ -1046,7 +1099,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
             const file = attachments[0];
             setMessages(prev => [...prev, { id: aiResponseId, text: `Scanning binary structure of \`${file.name}\`...`, sender: 'ai', status: 'generating' }]);
             const dumpData = await generateHexDump(file);
-            const prompt = `You are a binary analysis expert. Analyze the following hex dump from the file named '${dumpData.fileName}'. Identify any recognizable file headers (magic numbers), text strings, or structural patterns. Provide a brief summary of your findings.\n\n${dumpData.hex}`;
+            const prompt = `You are a reverse engineering specialist, trained on the Z0F course materials. Analyze the following hex dump from '${dumpData.fileName}'. Identify file headers (magic numbers), embedded strings (ASCII/Unicode), potential entry points, and any recognizable data structures or code patterns. Provide a concise, expert summary of your findings.\n\n${dumpData.hex}`;
             const stream = await sendMessageToAI([...messages, userMessage], [{ text: prompt }]);
             let fullResponse = '';
             for await (const chunk of stream) {
@@ -1055,6 +1108,16 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
             }
             if (isVoiceEnabled) speakText("Binary scan complete.");
             setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, status: 'complete' } : m));
+        } else if (command === 'Dense Scan') {
+            if (attachments.length === 0 || !attachments[0].type.startsWith('image/')) {
+                throw new Error("Please attach an image file to use the Dense Scan power.");
+            }
+            const imageFile = attachments[0];
+            setMessages(prev => [...prev, { id: aiResponseId, text: "Performing DensePose analysis...", sender: 'ai', media: { type: 'densePose', prompt: command, status: 'generating' } }]);
+            const base64Image = await fileToBase64(imageFile);
+            const imageUrl = await performDensePoseAnalysis(base64Image, imageFile.type);
+            if (isVoiceEnabled) speakText("Dense Scan complete.");
+            setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "Dense Scan complete.", media: { type: 'densePose', prompt: command, status: 'complete', url: imageUrl } } : m));
         }
         else {
             throw new Error('Unknown analysis command.');
@@ -1207,6 +1270,40 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
                 text: failureText,
                 huggingFaceData: { type, query, result: null, error: errorMessage }
             }];
+        });
+    }
+  };
+
+  const handleVectorDroneCommand = async (commandString: string) => {
+    const aiResponseId = (Date.now() + 1).toString();
+    const { command, params } = parseCommand(commandString);
+    
+    try {
+        if (command === 'Vector Status') {
+            setMessages(prev => [...prev, { id: aiResponseId, text: "Pinging drone for status...", sender: 'ai' }]);
+            const status = await vectorDroneService.getStatus();
+            setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "Drone status report acquired.", vectorStatus: status } : m));
+        } else if (command === 'Vector Roam') {
+            if (params.action !== 'start' && params.action !== 'stop') throw new Error("Invalid 'action' parameter for Vector Roam. Use 'start' or 'stop'.");
+            const responseText = await vectorDroneService.controlRoaming(params.action as 'start' | 'stop');
+            setMessages(prev => [...prev, { id: aiResponseId, text: responseText, sender: 'ai' }]);
+        } else if (command === 'Vector Say') {
+            if (!params.text) throw new Error("Missing 'text' parameter for Vector Say.");
+            const responseText = await vectorDroneService.sayText(params.text);
+            setMessages(prev => [...prev, { id: aiResponseId, text: responseText, sender: 'ai' }]);
+        } else {
+            throw new Error("Unknown Vector Drone command.");
+        }
+    } catch (error: any) {
+        console.error("Vector command failed:", error);
+        const failureText = `Vector command failed, Captain: ${error.message}`;
+        if (isVoiceEnabled) speakText(failureText);
+        setMessages(prev => {
+            const existingMsg = prev.find(m => m.id === aiResponseId);
+            if (existingMsg) {
+                return prev.map(m => m.id === aiResponseId ? { ...m, status: 'error' as const, text: failureText } : m);
+            }
+            return [...prev, { id: aiResponseId, sender: 'ai', status: 'error' as const, text: failureText }];
         });
     }
   };

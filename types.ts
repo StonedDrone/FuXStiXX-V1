@@ -164,6 +164,14 @@ export interface HexDumpData {
   ascii: string;
 }
 
+export interface VectorStatus {
+    isOnline: boolean;
+    batteryLevel: number; // 0-100
+    wifiStrength: number; // 0-100
+    isCharging: boolean;
+    statusText: string;
+}
+
 export interface Message {
   id: string;
   text: string;
@@ -171,11 +179,12 @@ export interface Message {
   attachments?: Attachment[];
   status?: 'generating' | 'complete' | 'error';
   media?: {
-    type: 'image' | 'video' | 'audio' | 'vr' | 'creativeCode' | 'uiMockup' | 'motionFx' | 'algoVisualization';
+    type: 'image' | 'video' | 'audio' | 'vr' | 'creativeCode' | 'uiMockup' | 'motionFx' | 'algoVisualization' | 'icon' | 'densePose' | 'magic3d' | 'gaussianDream';
     url?: string;
     content?: string;
     prompt: string;
     status?: 'generating' | 'complete' | 'error';
+    progress?: number;
   };
   huggingFaceData?: HuggingFaceResult;
   financialData?: FinancialData;
@@ -186,6 +195,7 @@ export interface Message {
   neuralArchitectureData?: NeuralArchitectureData;
   userSimulationData?: UserSimulationData;
   hexDumpData?: HexDumpData;
+  vectorStatus?: VectorStatus;
   isLiveStream?: boolean;
   isLiveSyncUpdate?: boolean;
 }

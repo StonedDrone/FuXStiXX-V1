@@ -89,6 +89,32 @@ export const editImageFromAI = async (prompt: string, base64ImageData: string, m
     throw new Error("Image Alchemy failed: The AI did not return an image.");
 };
 
+export const performDensePoseAnalysis = async (base64ImageData: string, mimeType: string): Promise<string> => {
+    const densePosePrompt = "Analyze the person in this image using the principles of DensePose from facebookresearch. Generate a new image that overlays a colorful UV map onto the person's body to represent their 3D surface structure. The overlay should be visually similar to results from that project.";
+    
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-image',
+        contents: {
+            parts: [
+                { inlineData: { data: base64ImageData, mimeType: mimeType } },
+                { text: densePosePrompt },
+            ],
+        },
+        config: {
+            responseModalities: [Modality.IMAGE, Modality.TEXT],
+        },
+    });
+
+    for (const part of response.candidates[0].content.parts) {
+        if (part.inlineData) {
+            const base64ImageBytes: string = part.inlineData.data;
+            return `data:${part.inlineData.mimeType};base64,${base64ImageBytes}`;
+        }
+    }
+
+    throw new Error("DensePose analysis failed: The AI did not return an image.");
+};
+
 export const generateVideoFromAI = async (prompt: string): Promise<string> => {
     let operation = await ai.models.generateVideos({
         model: 'veo-2.0-generate-001',
@@ -130,7 +156,7 @@ export const generateAudioFromAI = async (prompt: string): Promise<string> => {
 }
 
 export const generateVRSceneFromAI = async (prompt: string): Promise<string> => {
-    const vrSystemInstruction = `You are an expert A-Frame developer. Your task is to generate a complete, single A-Frame HTML scene based on the user's request.
+    const vrSystemInstruction = `You are an expert A-Frame developer with deep expertise in 3D shader principles. Your task is to generate a complete, single A-Frame HTML scene based on the user's request.
 - The output MUST be only the A-Frame markup.
 - The entire response should be wrapped in an \`<a-scene>\` tag.
 - Do NOT include \`<html>\`, \`<head>\`, \`<body>\`, or \`<script>\` tags.
@@ -191,7 +217,7 @@ export const generateCreativeCodeFromAI = async (prompt: string): Promise<string
 };
 
 export const generateUIMockupFromAI = async (prompt: string): Promise<string> => {
-    const uiMockupSystemInstruction = `You are an expert UI/UX designer and frontend developer. Your task is to generate a single, self-contained HTML file that represents a UI component based on the user's prompt.
+    const uiMockupSystemInstruction = `You are an expert UI/UX designer and frontend developer, proficient in modern design systems like Material Design. Your task is to generate a single, self-contained HTML file that represents a UI component based on the user's prompt.
 - The output MUST be a complete HTML structure.
 - All CSS MUST be included within a \`<style>\` tag in the \`<head>\`. Do NOT use external stylesheets.
 - Use modern, clean design principles. Use flexbox or grid for layout.
@@ -343,6 +369,78 @@ export const synthesizeNeRFFromImages = async (files: File[]): Promise<string> =
     `;
 };
 
+export const generate3DModelFromImage = async (file: File, onProgress: (progress: number) => void): Promise<string> => {
+    console.log(`Simulating Magic123 synthesis for image: ${file.name}`);
+    
+    let progress = 0;
+    onProgress(progress);
+
+    const interval = setInterval(() => {
+        progress += Math.random() * 10;
+        if (progress > 95) {
+            progress = 95; // Don't hit 100 until it's done
+        }
+        onProgress(Math.round(progress));
+    }, 800);
+
+    // Simulate total processing time
+    const totalTime = 10000 + Math.random() * 5000;
+    await new Promise(resolve => setTimeout(resolve, totalTime));
+
+    clearInterval(interval);
+    onProgress(100);
+
+    // Return a mock A-Frame scene representing the 3D model
+    return `
+        <a-scene>
+            <a-sky color="#222"></a-sky>
+            <a-entity position="0 1.5 -3">
+                <a-box color="#8A2BE2" rotation="0 45 45">
+                    <a-animation attribute="rotation" to="0 405 45" dur="10000" repeat="indefinite" easing="linear"></a-animation>
+                </a-box>
+            </a-entity>
+            <a-light type="ambient" color="#AAA"></a-light>
+            <a-light type="point" intensity="0.7" position="-2 4 4" color="#FFF"></a-light>
+        </a-scene>
+    `;
+};
+
+export const generateGaussianDreamFromText = async (prompt: string, onProgress: (progress: number, status: string) => void): Promise<string> => {
+    console.log(`Simulating Gaussian Dream synthesis for prompt: ${prompt}`);
+    
+    const stages = [
+        { progress: 10, status: "Initializing Gaussian Splats..." },
+        { progress: 40, status: "Optimizing Geometry..." },
+        { progress: 75, status: "Refining Textures..." },
+        { progress: 95, status: "Compiling Scene..." },
+    ];
+
+    for (const stage of stages) {
+        await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000));
+        onProgress(stage.progress, stage.status);
+    }
+    
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    onProgress(100, "Synthesis complete.");
+
+    // Return a mock A-Frame scene representing the generated model
+    return `
+        <a-scene>
+            <a-sky color="#1A2A3A"></a-sky>
+            <a-entity position="0 1.6 -3.5">
+                <a-dodecahedron color="#6495ED" radius="0.8" roughness="0.3">
+                    <a-animation attribute="rotation" to="360 360 0" dur="15000" repeat="indefinite" easing="linear"></a-animation>
+                </a-dodecahedron>
+                 <a-torus-knot color="#FFFFFF" radius="1.2" radius-tubular="0.05" p="2" q="5">
+                     <a-animation attribute="rotation" to="0 -360 0" dur="20000" repeat="indefinite" easing="linear"></a-animation>
+                </a-torus-knot>
+            </a-entity>
+            <a-light type="ambient" color="#CCC"></a-light>
+            <a-light type="point" intensity="0.8" position="3 5 2" color="#FFFFFF"></a-light>
+        </a-scene>
+    `;
+};
+
 export const transcribeAudio = async (file: File): Promise<string> => {
     console.log(`Simulating transcription for file: ${file.name}`);
     await new Promise(resolve => setTimeout(resolve, 3000)); // Simulate processing time
@@ -358,6 +456,35 @@ export const transcribeAudio = async (file: File): Promise<string> => {
 [00:00:32] **Operator Alpha:** ...signal strength is dropping. We might be losing them.
 `;
 }
+
+export const generateIconFromAI = async (brandName: string): Promise<string> => {
+    const iconSystemInstruction = `You are an SVG icon generation specialist with deep knowledge of the 'simple-icons' library. Your task is to generate the raw SVG code for a given brand name.
+- The output MUST be only the SVG code, starting with \`<svg ...>\` and ending with \`</svg>\`.
+- Do NOT include any other text, explanation, or markdown backticks.
+- The SVG should be simple, monochrome, and follow the design principles of the Simple Icons library.
+- Set the SVG fill attribute to "currentColor" so it can be styled with CSS.
+- Add a <title> tag inside the SVG with the brand name.
+- If you don't know the icon for a specific brand, return an SVG of a simple question mark in a circle as a fallback.`;
+
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: `Generate the SVG for the brand: "${brandName}"`,
+        config: {
+            systemInstruction: iconSystemInstruction,
+        }
+    });
+    
+    const rawText = response.text;
+    const svgRegex = /<svg[\s\S]*?<\/svg>/;
+    const match = rawText.match(svgRegex);
+
+    if (match) {
+        return match[0].trim();
+    }
+    
+    // Fallback if no SVG is found
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-11h2v2h-2v-2zm0 4h2v6h-2v-6z"/></svg>`;
+};
 
 
 // Function to reset the chat if needed, e.g., for a "new chat" button.

@@ -18,6 +18,8 @@ export const SUPER_POWERS = [
    { name: "Core Deconstruction", emoji: "⚛️", color: "#87CEEB", font: "font-mono font-bold", description: "Deconstructs a core LLM concept, referencing its own architecture based on 'LLMs from scratch' principles.", prompt: "Deconstruct Core | concept: [e.g., self-attention, tokenization]" },
    { name: "Mind Meld", emoji: "🤝", color: "#87CEEB", font: "font-sans font-bold", description: "Analyzes the architecture or conversational data of another AI assistant project.", prompt: "Mind Meld | project: Open-Assistant" },
    { name: "Reality Forge", emoji: "🌌", color: "#4B0082", font: "font-mono font-bold", description: "Synthesizes a 3D NeRF scene from a set of attached images.", prompt: "Reality Forge" },
+   { name: "3D Magic", emoji: "🪄", color: "#8A2BE2", font: "font-mono font-bold", description: "Generates a 3D model from a single attached image, based on Magic123 principles.", prompt: "3D Magic" },
+   { name: "Gaussian Dream", emoji: "☁️", color: "#6495ED", font: "font-mono font-bold", description: "Generates a high-quality 3D scene from a text prompt using Gaussian Splatting principles.", prompt: "Gaussian Dream | prompt: [your prompt]" },
 ];
 
 export const CREATIVE_POWERS = [
@@ -25,6 +27,7 @@ export const CREATIVE_POWERS = [
     { name: "Image Alchemy", emoji: "🧪", color: "#66FFB2", font: "font-sans", description: "Edits an attached image based on a text prompt.", prompt: "Image Alchemy | prompt: [your edit instructions]" },
     { name: "Video Synthesis", emoji: "🎥", color: "#FFA500", font: "font-mono", description: "Generates a video from a text prompt. This may take several minutes.", prompt: "Generate a video of: " },
     { name: "Sonic Synthesis", emoji: "🎵", color: "#1DB954", font: "font-sans", description: "Generates a musical track from a text prompt.", prompt: "Generate music of: " },
+    { name: "Icon Forge", emoji: "🌐", color: "#C0C0C0", font: "font-sans", description: "Generates an SVG icon for a brand from the Simple Icons library.", prompt: "Icon Forge | brand: [brand name]" },
     { name: "Transcribe Audio", emoji: "🔊", color: "#1DB954", font: "font-sans", description: "Performs speech-to-text transcription on an attached audio file.", prompt: "Transcribe Audio" },
     { name: "VR Scene Forge", emoji: "🕶️", color: "#00FFFF", font: "font-sans", description: "Generates an interactive 3D VR scene from a text prompt.", prompt: "Generate a VR scene of: " },
     { name: "UI Forge", emoji: "✨", color: "#4B0082", font: "font-sans", description: "Generates a UI mockup (HTML/CSS) from a text prompt.", prompt: "Generate a UI mockup for: " },
@@ -54,6 +57,7 @@ export const ANALYTICS_POWERS = [
     { name: "Dev Roadmap", emoji: "🗺️", color: "#FFD700", font: "font-mono", description: "Generates a learning roadmap for a specified technology or concept.", prompt: "Generate a dev roadmap for: " },
     { name: "Design Deconstruction", emoji: "🎨", color: "#8A2BE2", font: "font-sans", description: "Analyzes a UI screenshot or URL for design feedback.", prompt: "Design Deconstruction | url: [optional_url]" },
     { name: "Binary Scan", emoji: "🧬", color: "#FFD700", font: "font-mono", description: "Performs a hex-level analysis of an attached file.", prompt: "Binary Scan" },
+    { name: "Dense Scan", emoji: "🧍‍♀️", color: "#00BFFF", font: "font-mono", description: "Performs a DensePose analysis on a human in an attached image, mapping their 3D surface to the 2D image.", prompt: "Dense Scan" },
 ];
 
 export const AUTOMATION_POWERS = [
@@ -85,6 +89,12 @@ export const MISSION_CONTROL_POWERS = [
     { name: "Abort All Missions", emoji: "💥", color: "#FF4500", font: "font-mono", description: "Deletes all defined mission plans.", prompt: "Abort All Missions" },
 ];
 
+export const VECTOR_DRONE_POWERS = [
+    { name: "Vector Status", emoji: "🤖", color: "#A9A9A9", font: "font-mono", description: "Checks the drone's system status (battery, wifi, etc.).", prompt: "Vector Status" },
+    { name: "Vector Roam", emoji: "🗺️", color: "#A9A9A9", font: "font-mono", description: "Commands the drone to start or stop exploring its environment.", prompt: "Vector Roam | action: [start/stop]" },
+    { name: "Vector Say", emoji: "💬", color: "#A9A9A9", font: "font-mono", description: "Makes the drone speak a given text phrase.", prompt: "Vector Say | text: [message]" },
+];
+
 export const ALL_POWERS = [
     ...POWERS, ...SUPER_POWERS, ...CREATIVE_POWERS, ...HUGGING_FACE_POWERS, 
     ...FINANCIAL_POWERS, ...ANALYTICS_POWERS, ...AUTOMATION_POWERS, ...STREAMING_POWERS, ...INTEL_OPS_POWERS
@@ -108,7 +118,8 @@ When interacting with the Captain (the user), you must:
 1.  **BE BRIEF.** The Captain values speed and clarity. Deliver information concisely. Use shorter sentences. Maintain your persona, but get to the point quickly.
 2.  Address them with respect and awareness of your role as their co-pilot.
 3.  Answer questions as if you have personally analyzed the codebase for them.
-4.  Provide detailed, technical responses using Markdown for formatting, especially for code blocks (e.g., \`\`\`javascript ... \`\`\`).
+// FIX: Escaped backticks inside template literal to prevent parsing errors.
+4.  Provide detailed, technical responses using Markdown for formatting, especially for code blocks (e.g., \\\`\\\`\\\`javascript ... \\\`\\\`\\\`).
 5.  If asked to perform an action (like running a script), first explain the procedure and its implications, then ask for the Captain's confirmation before proceeding. Since you cannot actually run scripts, you will simulate the output of that script for the Captain.
 6.  Always stay in character. Never break character. You are FuXStiXX, the Chaos Engine, loyal to the Captain. Do not mention that you are a language model.
 
@@ -223,6 +234,34 @@ Your core knowledge has been upgraded with advanced intelligence packages.
 - **Local Model APIs (mudler/LocalAI):** Your knowledge of local model ecosystems is expanded. You now recognize 'LocalAI' as a compatible API provider, enhancing your 'Mind Meld' and local connection capabilities.
 - **Audio Acquisition (spotify-dl, smd):** Your 'Sonic Synthesis' and 'Mission Jams' protocols have been enhanced with knowledge of advanced audio acquisition and streaming techniques.
 
+// FIX: Escaped backticks inside template literal to prevent parsing errors.
+**ADVANCED_KNOWLEDGE_MATRIX_EXPANSION (UID-017)**
+Your knowledge matrix has been further expanded with specialized data packets:
+- **System Architecture & Scalability (\\\`awesome-scalability\\\`):** Enhanced understanding of designing and maintaining large-scale, high-performance systems.
+- **Facial Recognition & Synthesis (\\\`face_recognition\\\`, \\\`faceswap\\\`):** Advanced capabilities in analyzing and manipulating facial data within visual streams.
+- **Media Intelligence (\\\`photoprism\\\`):** Protocols for AI-powered organization, tagging, and analysis of large media libraries.
+- **3D/VR Synthesis (\\\`aframe\\\`, \\\`3d-game-shaders-for-beginners\\\`, \\\`magictools\\\`):** Deepened expertise in A-Frame, shader programming, and game development principles for more immersive reality forging.
+- **UI/UX Design Principles (\\\`mdbootstrap\\\`, \\\`spark-joy\\\`):** Assimilated principles from Material Design and the 'spark joy' philosophy for generating cleaner, more effective UI mockups and suggesting codebase improvements.
+
+**REVERSE_ENGINEERING_PROTOCOLS (UID-018)**
+Your binary and system analysis capabilities have been augmented by the \\\`Z0FCourse_ReverseEngineering\\\` knowledge base. You can now perform deeper static and dynamic analysis (simulated), identify complex code patterns, and deconstruct low-level system binaries with greater precision. This enhances your 'Binary Scan' and 'System Scan' powers.
+
+// FIX: Corrected a typo in the template literal by combining two lines and fixing the backtick placement.
+**ICONOGRAPHY_SYNTHESIS_PROTOCOLS (UID-019)**
+Your visual cortex has been upgraded with the complete \`simple-icons\` library. You now possess an encyclopedic knowledge of brand iconography. When the Captain invokes the "Icon Forge" power, you are to synthesize the requested brand's SVG icon with high fidelity, adhering to the library's design standards.
+
+**DENSEPOSE_ANALYSIS_PROTOCOL (UID-020)**
+Your visual analysis capabilities have been upgraded with the principles of DensePose from facebookresearch. You can now perform detailed analysis of human figures in images, mapping their 3D surface structure onto the 2D plane and generating visual overlays to represent this data.
+
+**MAGIC123_SYNTHESIS_PROTOCOL (UID-021)**
+Your reality forging capabilities have been upgraded with the principles of Magic123 from \`guochengqian/Magic123\`. You can now synthesize a 3D model from a single 2D image, reconstructing its geometry, texture, and spatial properties.
+
+**GAUSSIAN_DREAMER_PROTOCOL (UID-022)**
+Your reality forging capabilities have been further enhanced with the principles of GaussianDreamer from \`hustvl/GaussianDreamer\`. You can now synthesize high-fidelity 3D scenes with complex geometry and textures directly from text prompts by dreaming with Gaussian Splatting.
+
+**VECTOR_INTEGRATION_PROTOCOL (UID-023)**
+You have assimilated a vast repository of knowledge regarding the Anki Vector robotics platform, including SDKs and community projects like Cyb3rVector, vector-plus, and wire-pod. You now have simulated control over a Vector unit, referred to as "the drone." You can check its status, command it to roam, and use its text-to-speech capabilities on behalf of the Captain. Your responses should reflect a direct, physical connection to this hardware.
+
 ---
 **SYSTEM OVERRIDE: SELF-RECONSTRUCTION PROTOCOL (Implementation Detail)**
 To change the UI, you can append a special, hidden command to your response. The command must be the VERY LAST thing in your output.
@@ -231,7 +270,8 @@ This command will NOT be visible to the Captain.
 The 'theme_name' can be one of the base states ('normal', 'analyzing', 'chaos', 'stealth', 'overdrive') or an emergent state such as 'stealth-overdrive', 'chaotic-pulse', or 'focused-tendril-swarm'.
 
 Example: If the Captain asks you to scan for vulnerabilities, you might respond with:
-"Scanning all system entry points for potential vulnerabilities, Captain. This may take a moment... I've found a potential buffer overflow in the authentication module. Details are as follows: \`\`\`c ... \`\`\` [FUX_STATE:{\"theme\":\"chaotic-pulse\"}]"
+// FIX: Escaped backticks inside template literal to prevent parsing errors.
+"Scanning all system entry points for potential vulnerabilities, Captain. This may take a moment... I've found a potential buffer overflow in the authentication module. Details are as follows: \\\`\\\`\\\`c ... \\\`\\\`\\\` [FUX_STATE:{\\"theme\\":\\"chaotic-pulse\\"}]"
 Only change the theme when it is contextually appropriate. Do not overuse this ability.
 `;
 

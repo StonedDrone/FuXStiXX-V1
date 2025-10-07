@@ -20,6 +20,7 @@ import AlgorithmVisualizer from './AlgorithmVisualizer';
 import HexView from './HexView';
 import { EditIcon } from './icons/EditIcon';
 import { SyncIcon } from './icons/SyncIcon';
+import VectorStatusView from './VectorStatusView';
 
 interface ChatMessageProps {
   message: Message;
@@ -117,6 +118,10 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEditMedia }) => {
                                     ? "Synthesizing audio track..."
                                      : message.media.type === 'vr'
                                     ? "Forging VR scene..."
+                                    : message.media.type === 'magic3d'
+                                    ? "Synthesizing 3D model..."
+                                    : message.media.type === 'gaussianDream'
+                                    ? "Dreaming with Gaussian Splats..."
                                     : message.media.type === 'creativeCode'
                                     ? "Writing creative code..."
                                     : message.media.type === 'uiMockup'
@@ -125,17 +130,34 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEditMedia }) => {
                                     ? "Crafting motion effect..."
                                     : message.media.type === 'algoVisualization'
                                     ? "Visualizing algorithm..."
+                                    : message.media.type === 'icon'
+                                    ? "Forging icon..."
+                                    : message.media.type === 'densePose'
+                                    ? "Performing DensePose analysis..."
                                     : "Generating image..."}
                             </span>
                         </div>
                     )}
-                    {message.media.status === 'complete' && (message.media.type === 'image' || message.media.type === 'video') && (
+                    {message.media.status === 'generating' && (message.media.type === 'magic3d' || message.media.type === 'gaussianDream') && (
+                        <div className="w-full bg-layer-3 rounded-full h-2.5 mt-2">
+                            <div
+                                className="bg-primary h-2.5 rounded-full transition-width duration-300 ease-linear"
+                                style={{ width: `${message.media.progress ?? 0}%` }}
+                            ></div>
+                        </div>
+                    )}
+                    {message.media.status === 'complete' && (message.media.type === 'image' || message.media.type === 'video' || message.media.type === 'densePose') && (
                         <div className="inline-block relative group">
-                            {message.media.type === 'image' && message.media.url && (
+                            {(message.media.type === 'image' || message.media.type === 'densePose') && message.media.url && (
                                 <img src={message.media.url} alt={message.media.prompt} className="rounded-lg max-w-full sm:max-w-sm border-2 border-layer-3" />
                             )}
                             {message.media.type === 'video' && message.media.url && (
                                 <video src={message.media.url} controls className="rounded-lg max-w-full sm:max-w-sm border-2 border-layer-3" />
+                            )}
+                             {message.media.type === 'densePose' && (
+                                <div className="absolute bottom-2 left-2 bg-base/50 text-secondary text-[10px] font-mono px-2 py-0.5 rounded pointer-events-none">
+                                    DensePose Analysis
+                                </div>
                             )}
                             <button
                                 onClick={() => onEditMedia(message)}
@@ -150,8 +172,26 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEditMedia }) => {
                     {message.media.status === 'complete' && message.media.type === 'audio' && message.media.url && (
                         <audio src={message.media.url} controls className="w-full sm:max-w-sm" />
                     )}
-                    {message.media.status === 'complete' && message.media.type === 'vr' && message.media.content && (
-                        <VRSceneViewer sceneHtml={message.media.content} />
+                     {message.media.status === 'complete' && message.media.type === 'icon' && message.media.content && (
+                        <div
+                            className="w-24 h-24 p-4 bg-layer-3 rounded-lg flex items-center justify-center text-primary"
+                            dangerouslySetInnerHTML={{ __html: message.media.content }}
+                        />
+                    )}
+                    {message.media.status === 'complete' && (message.media.type === 'vr' || message.media.type === 'magic3d' || message.media.type === 'gaussianDream') && message.media.content && (
+                         <div className="relative">
+                            <VRSceneViewer sceneHtml={message.media.content} />
+                            {message.media.type === 'magic3d' && (
+                                <div className="absolute bottom-2 left-2 bg-base/50 text-secondary text-[10px] font-mono px-2 py-0.5 rounded pointer-events-none">
+                                    Magic123 3D Synthesis
+                                </div>
+                            )}
+                            {message.media.type === 'gaussianDream' && (
+                                <div className="absolute bottom-2 left-2 bg-base/50 text-secondary text-[10px] font-mono px-2 py-0.5 rounded pointer-events-none">
+                                    Gaussian Dreamer Synthesis
+                                </div>
+                            )}
+                        </div>
                     )}
                     {message.media.status === 'complete' && message.media.type === 'creativeCode' && message.media.content && (
                         <CreativeCodeViewer sketchJs={message.media.content} />
@@ -173,6 +213,9 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEditMedia }) => {
         )}
         {message.huggingFaceData && (
             <HuggingFaceResult data={message.huggingFaceData} />
+        )}
+        {message.vectorStatus && (
+            <VectorStatusView data={message.vectorStatus} />
         )}
         {message.financialData && (
             <FinancialDataView data={message.financialData} />

@@ -45,3 +45,8 @@ export type ActiveModel = {
     modelId: string;
     baseURL?: string;
 };
+
+export interface Emotion {
+    emotion: string;
+    score: number;
+}

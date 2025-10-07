@@ -6,6 +6,7 @@ import { AttachmentIcon } from './icons/AttachmentIcons';
 import { LoaderIcon } from './icons/LoaderIcon';
 import HuggingFaceResult from './HuggingFaceResult';
 import FinancialDataView from './FinancialDataView';
+import WorkflowDataView from './WorkflowDataView';
 
 interface ChatMessageProps {
   message: Message;
@@ -13,6 +14,7 @@ interface ChatMessageProps {
 
 const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
   const isAI = message.sender === 'ai';
+  // FIX: Corrected typo in type from HTMLDivDivElement to HTMLDivElement.
   const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -113,6 +115,9 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
         )}
         {message.financialData && (
             <FinancialDataView data={message.financialData} />
+        )}
+        {message.workflowData && (
+            <WorkflowDataView data={message.workflowData} />
         )}
       </div>
     </div>

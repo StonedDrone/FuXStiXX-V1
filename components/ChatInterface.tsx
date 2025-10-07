@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { GoogleGenAI, Blob, LiveServerMessage, Modality } from "@google/genai";
-import { Message, Attachment, ActiveModel } from '../types';
+import { Message, Attachment, ActiveModel, DAG } from '../types';
 import { CHECK_IN_PROMPT } from '../constants';
 import { sendMessageToAI, generateImageFromAI, generateVideoFromAI, generateAudioFromAI, resetChat } from '../services/geminiService';
 import * as hfService from '../services/huggingFaceService';
 import * as lmStudioService from '../services/lmStudioService';
 import * as financialService from '../services/financialService';
+import * as workflowService from '../services/workflowService';
 import ChatMessage from './ChatMessage';
 import { SendIcon } from './icons/SendIcon';
 import { CameraIcon } from './icons/CameraIcon';
@@ -27,6 +28,7 @@ import { usePoseDetection } from '../hooks/usePoseDetection';
 import { FaceSmileIcon } from './icons/FaceSmileIcon';
 import { PersonStandingIcon } from './icons/PersonStandingIcon';
 import { ScanIcon } from './icons/ScanIcon';
+import WorkflowStatus from './WorkflowStatus';
 
 // --- Audio Utility Functions ---
 function encode(bytes: Uint8Array) {
@@ -127,6 +129,8 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
   const [liveTranscripts, setLiveTranscripts] = useState<LiveTranscripts>({ user: '', ai: '' });
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isScanViewOpen, setIsScanViewOpen] = useState(false);
+  const [dags, setDags] = useState<DAG[]>([]);
+
   const { setTheme } = useUIState();
   const { 
     isDetecting: isEmotionDetecting, 
@@ -180,6 +184,25 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
   useEffect(() => {
     localStorage.setItem('fuxstixx-chat-history', JSON.stringify(messages));
   }, [messages]);
+  
+    useEffect(() => {
+    // Initialize the workflow service scheduler
+    workflowService.initializeScheduler(setDags);
+    // Initial load
+    setDags(workflowService.getDags());
+    
+    // Set up a periodic check to update the UI, e.g., every 5 seconds
+    const intervalId = setInterval(() => {
+      setDags(workflowService.getDags());
+    }, 5000);
+
+    return () => {
+        clearInterval(intervalId);
+        // We might want a way to stop the scheduler if the component unmounts
+        // workflowService.stopScheduler(); 
+    };
+  }, []);
+
 
   useEffect(() => {
     const goOnline = () => setIsOnline(true);
@@ -447,6 +470,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     const audioPromptPrefix = "Generate music of: ";
     const ghostCodePrefix = "Ghost Code |";
     const financialPrefixes = ["Market Pulse |", "Sector Intel |", "Crypto Scan |"];
+    const automationPrefixes = ["Define DAG |", "Trigger DAG |", "DAG Status", "Clear All DAGs"];
 
     const messageAttachments: Attachment[] = attachments.map(file => ({ name: file.name, type: file.type }));
     const userMessage: Message = { id: Date.now().toString(), text: userMessageText, sender: 'user', attachments: messageAttachments };
@@ -476,6 +500,9 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
 
       } else if (financialPrefixes.some(prefix => userMessageText.startsWith(prefix))) {
           await handleFinancialCommand(userMessageText);
+      
+      } else if (automationPrefixes.some(prefix => userMessageText.startsWith(prefix))) {
+            await handleAutomationCommand(userMessageText);
 
       } else if (userMessageText.startsWith(imagePromptPrefix)) {
           const content = userMessageText.substring(imagePromptPrefix.length);
@@ -603,6 +630,52 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     setIsScanViewOpen(false);
     sendAfterScanRef.current = true;
   };
+
+  const handleAutomationCommand = async (commandString: string) => {
+    const aiResponseId = (Date.now() + 1).toString();
+    const { command, params } = parseCommand(commandString);
+    let responseText = '';
+    let workflowData: any = null;
+    
+    try {
+        if (command === 'Define DAG') {
+            if (!params.name || !params.schedule || !params.tasks) throw new Error("Missing parameters. 'name', 'schedule', and 'tasks' are required.");
+            const tasks = params.tasks.split(',').map(t => t.trim());
+            workflowService.defineDag(params.name, params.schedule, tasks);
+            responseText = `DAG '${params.name}' has been defined and scheduled. I will orchestrate its tasks as instructed.`;
+            setDags(workflowService.getDags()); // Update state immediately
+        } else if (command === 'Trigger DAG') {
+            if (!params.name) throw new Error("Missing 'name' parameter.");
+            workflowService.triggerDag(params.name);
+            responseText = `Acknowledged. Manually triggering a run for DAG '${params.name}'. Monitoring execution.`;
+            setDags(workflowService.getDags());
+        } else if (command === 'DAG Status') {
+            responseText = "Captain, here is the current status of all automated workflows.";
+            workflowData = { dags: workflowService.getDags() };
+        } else if (command === 'Clear All DAGs') {
+            workflowService.clearAllDags();
+            responseText = "Confirmed, Captain. All defined DAGs and their operational history have been purged from the system.";
+            setDags([]);
+        } else {
+            throw new Error('Unknown automation command.');
+        }
+
+        setMessages(prev => [...prev, { 
+            id: aiResponseId, 
+            text: responseText, 
+            sender: 'ai', 
+            workflowData 
+        }]);
+        if (isVoiceEnabled) speakText(responseText);
+
+    } catch (error: any) {
+        console.error('Automation command failed:', error);
+        const failureText = `Automation command failed, Captain: ${error.message}`;
+        if (isVoiceEnabled) speakText(failureText);
+        setMessages(prev => [...prev, { id: aiResponseId, sender: 'ai', status: 'error' as const, text: failureText }]);
+    }
+};
+
 
   const handleFinancialCommand = async (commandString: string) => {
     const aiResponseId = (Date.now() + 1).toString();
@@ -832,6 +905,9 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     >
       {isCameraOpen && <CameraView onClose={() => setIsCameraOpen(false)} onCapture={handleCameraCapture} />}
       {isScanViewOpen && <ObjectDetectionView onClose={() => setIsScanViewOpen(false)} onReport={handleScanReport} />}
+      
+      <WorkflowStatus dags={dags} />
+      
       <div className="flex-1 overflow-y-auto pr-2">
         <div className="space-y-6">
           {messages.map((msg) => <ChatMessage key={msg.id} message={msg} />)}

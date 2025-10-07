@@ -47,6 +47,32 @@ export interface FinancialData {
     data: StockQuote | NewsArticle[] | CryptoPrice;
 }
 
+export type DAGRunStatus = 'running' | 'success' | 'failed' | 'scheduled';
+
+export interface DAGTask {
+    id: string;
+    description: string;
+}
+
+export interface DAGRun {
+    id: string;
+    startTime: string;
+    endTime?: string;
+    status: DAGRunStatus;
+}
+
+export interface DAG {
+    id: string;
+    name: string;
+    schedule: string;
+    tasks: DAGTask[];
+    runs: DAGRun[];
+    isPaused: boolean;
+}
+
+export interface WorkflowData {
+    dags: DAG[];
+}
 
 export interface Message {
   id: string;
@@ -62,6 +88,7 @@ export interface Message {
   };
   huggingFaceData?: HuggingFaceResult;
   financialData?: FinancialData;
+  workflowData?: WorkflowData;
 }
 
 export interface Track {

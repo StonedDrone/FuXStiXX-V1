@@ -1,6 +1,6 @@
 import { GoogleGenAI, Part, Content, Chat, Modality, Type } from "@google/genai";
 import { AI_PERSONA_INSTRUCTION } from '../constants';
-import { Message, UserSimulationData } from '../types';
+import { Message, UserSimulationData, PlaylistAnalysisData } from '../types';
 
 const API_KEY = process.env.API_KEY;
 
@@ -139,20 +139,7 @@ export const generateVideoFromAI = async (prompt: string): Promise<string> => {
 }
 
 export const generateAudioFromAI = async (prompt: string): Promise<string> => {
-    console.log("Simulating audio generation for prompt:", prompt);
-    // Simulate network delay and generation time
-    await new Promise(resolve => setTimeout(resolve, 8000));
-    
-    // In a real scenario, this would call a text-to-music API.
-    // For now, we return a pre-canned track to demonstrate the UI flow.
-    const mockAudioUrl = 'https://cdn.pixabay.com/audio/2023/08/01/audio_a1458f3889.mp3';
-    
-    // Randomly simulate a failure to show error handling
-    if (prompt.toLowerCase().includes("error")) {
-         throw new Error("Simulated audio generation failure.");
-    }
-
-    return mockAudioUrl;
+    throw new Error("Sonic Synthesis Protocol is currently offline. No audio generation endpoint is available.");
 }
 
 export const generateVRSceneFromAI = async (prompt: string): Promise<string> => {
@@ -345,116 +332,114 @@ export const generateUserSimulationFromAI = async (prompt: string): Promise<User
     }
 };
 
-export const synthesizeNeRFFromImages = async (files: File[]): Promise<string> => {
-    console.log(`Simulating NeRF synthesis for ${files.length} images.`);
-    // Simulate a longer processing time for this "super power"
-    await new Promise(resolve => setTimeout(resolve, 12000));
+const parseCommand = (commandString: string): { command: string, params: Record<string, string> } => {
+    const parts = commandString.split('|').map(p => p.trim());
+    const command = parts[0];
+    const params: Record<string, string> = {};
+    parts.slice(1).forEach(part => {
+        const [key, ...valueParts] = part.split(':');
+        if (key && valueParts.length > 0) {
+            params[key.trim().toLowerCase()] = valueParts.join(':').trim();
+        }
+    });
+    return { command, params };
+};
 
-    // Randomly fail to show error handling
-    if (Math.random() < 0.2) {
-        throw new Error("Simulated NeRF synthesis failed. Could not converge on a solution.");
+export const analyzePlaylistFromAI = async (prompt: string): Promise<PlaylistAnalysisData> => {
+    const playlistSystemInstruction = `You are a music analysis expert with deep knowledge of Spotify's ecosystem. Based on the user's prompt which contains a URL or description of a playlist, generate a plausible and detailed analysis. The response must be a JSON object that strictly adheres to the provided schema. Be creative and make the analysis sound authentic.`;
+    
+    const { params } = parseCommand(prompt);
+    if (!params.url) throw new Error("Missing 'url' parameter for Playlist Analysis.");
+    const url = params.url;
+
+    const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: `Analyze the following playlist: "${url}"`,
+        config: {
+            systemInstruction: playlistSystemInstruction,
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    sourceUrl: { type: Type.STRING, description: "The original URL of the playlist provided by the user." },
+                    name: { type: Type.STRING, description: "A plausible name for the playlist." },
+                    description: { type: Type.STRING, description: "A short, creative description of the playlist's vibe." },
+                    mood: {
+                        type: Type.ARRAY,
+                        items: { type: Type.STRING },
+                        description: "An array of 3-5 keywords describing the mood (e.g., 'Chill', 'Upbeat', 'Melancholic')."
+                    },
+                    genres: {
+                        type: Type.ARRAY,
+                        items: { type: Type.STRING },
+                        description: "An array of 3-5 prominent genres found in the playlist (e.g., 'Lofi Hip-Hop', 'Indie Pop')."
+                    },
+                    topArtists: {
+                        type: Type.ARRAY,
+                        items: { type: Type.STRING },
+                        description: "An array of 3-5 representative artists from the playlist."
+                    },
+                    trackCount: { type: Type.INTEGER, description: "A plausible number of tracks in the playlist (e.g., between 20 and 150)." }
+                },
+                required: ["sourceUrl", "name", "description", "mood", "genres", "topArtists", "trackCount"]
+            },
+        },
+    });
+
+    const jsonStr = response.text.trim();
+    try {
+        const parsedJson = JSON.parse(jsonStr);
+        // The AI generates the content, but we ensure the source URL is the one provided by the user.
+        parsedJson.sourceUrl = url;
+        return parsedJson;
+    } catch (e) {
+        console.error("Failed to parse playlist analysis JSON:", e);
+        throw new Error("The AI returned an invalid JSON object for the playlist analysis.");
     }
+};
 
-    // Return a pre-canned A-Frame scene that looks like a point cloud
-    return `
-        <a-scene>
-            <a-sky color="#111"></a-sky>
-            <a-entity position="0 1.5 -2">
-                <a-entity id="points" particle-system="preset: dust; particleCount: 5000; color: #FFF, #32CD32"></a-entity>
-                <a-animation attribute="rotation" to="0 360 0" dur="20000" repeat="indefinite" easing="linear"></a-animation>
-            </a-entity>
-            <a-light type="ambient" color="#888"></a-light>
-            <a-light type="point" intensity="0.5" position="2 4 4"></a-light>
-        </a-scene>
-    `;
+export const synthesizeNeRFFromImages = async (files: File[]): Promise<string> => {
+    throw new Error("Reality Forge Protocol is currently offline. No NeRF synthesis endpoint is available.");
 };
 
 export const generate3DModelFromImage = async (file: File, onProgress: (progress: number) => void): Promise<string> => {
-    console.log(`Simulating Magic123 synthesis for image: ${file.name}`);
-    
-    let progress = 0;
-    onProgress(progress);
-
-    const interval = setInterval(() => {
-        progress += Math.random() * 10;
-        if (progress > 95) {
-            progress = 95; // Don't hit 100 until it's done
-        }
-        onProgress(Math.round(progress));
-    }, 800);
-
-    // Simulate total processing time
-    const totalTime = 10000 + Math.random() * 5000;
-    await new Promise(resolve => setTimeout(resolve, totalTime));
-
-    clearInterval(interval);
-    onProgress(100);
-
-    // Return a mock A-Frame scene representing the 3D model
-    return `
-        <a-scene>
-            <a-sky color="#222"></a-sky>
-            <a-entity position="0 1.5 -3">
-                <a-box color="#8A2BE2" rotation="0 45 45">
-                    <a-animation attribute="rotation" to="0 405 45" dur="10000" repeat="indefinite" easing="linear"></a-animation>
-                </a-box>
-            </a-entity>
-            <a-light type="ambient" color="#AAA"></a-light>
-            <a-light type="point" intensity="0.7" position="-2 4 4" color="#FFF"></a-light>
-        </a-scene>
-    `;
+    throw new Error("3D Magic Protocol is currently offline. No single-image 3D synthesis endpoint is available.");
 };
 
 export const generateGaussianDreamFromText = async (prompt: string, onProgress: (progress: number, status: string) => void): Promise<string> => {
-    console.log(`Simulating Gaussian Dream synthesis for prompt: ${prompt}`);
-    
-    const stages = [
-        { progress: 10, status: "Initializing Gaussian Splats..." },
-        { progress: 40, status: "Optimizing Geometry..." },
-        { progress: 75, status: "Refining Textures..." },
-        { progress: 95, status: "Compiling Scene..." },
-    ];
+    throw new Error("Gaussian Dream Protocol is currently offline. No text-to-3D endpoint is available.");
+};
 
-    for (const stage of stages) {
-        await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000));
-        onProgress(stage.progress, stage.status);
-    }
-    
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    onProgress(100, "Synthesis complete.");
-
-    // Return a mock A-Frame scene representing the generated model
-    return `
-        <a-scene>
-            <a-sky color="#1A2A3A"></a-sky>
-            <a-entity position="0 1.6 -3.5">
-                <a-dodecahedron color="#6495ED" radius="0.8" roughness="0.3">
-                    <a-animation attribute="rotation" to="360 360 0" dur="15000" repeat="indefinite" easing="linear"></a-animation>
-                </a-dodecahedron>
-                 <a-torus-knot color="#FFFFFF" radius="1.2" radius-tubular="0.05" p="2" q="5">
-                     <a-animation attribute="rotation" to="0 -360 0" dur="20000" repeat="indefinite" easing="linear"></a-animation>
-                </a-torus-knot>
-            </a-entity>
-            <a-light type="ambient" color="#CCC"></a-light>
-            <a-light type="point" intensity="0.8" position="3 5 2" color="#FFFFFF"></a-light>
-        </a-scene>
-    `;
+const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => {
+            const result = (reader.result as string).split(',')[1];
+            resolve(result);
+        };
+        reader.onerror = error => reject(error);
+    });
 };
 
 export const transcribeAudio = async (file: File): Promise<string> => {
-    console.log(`Simulating transcription for file: ${file.name}`);
-    await new Promise(resolve => setTimeout(resolve, 3000)); // Simulate processing time
+    const base64Audio = await fileToBase64(file);
+    const audioPart: Part = {
+        inlineData: {
+            mimeType: file.type,
+            data: base64Audio,
+        },
+    };
+    const textPart: Part = {
+        text: "Transcribe the following audio file.",
+    };
 
-    return `
-[00:00:01] **Operator Alpha:** Mission status check. All systems nominal.
-[00:00:05] **Operator Bravo:** Confirmed. Orbit is stable. We're tracking the anomaly on schedule.
-[00:00:10] **Operator Alpha:** Any new developments on the signal source?
-[00:00:13] **Operator Bravo:** Negative. Still faint. Looks like a repeating pattern, but the resolution is too low to decode. We'll need to deploy the deep-space probe for a closer look.
-[00:00:21] **Operator Alpha:** Understood. The Captain has already authorized the deployment. Proceed when ready.
-[00:00:25] **Operator Bravo:** Roger that. Initiating probe deployment sequence now.
-[00:00:29] **[STATIC]**
-[00:00:32] **Operator Alpha:** ...signal strength is dropping. We might be losing them.
-`;
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: { parts: [audioPart, textPart] },
+    });
+
+    return response.text;
 }
 
 export const generateIconFromAI = async (brandName: string): Promise<string> => {

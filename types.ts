@@ -172,6 +172,16 @@ export interface VectorStatus {
     statusText: string;
 }
 
+export interface PlaylistAnalysisData {
+    sourceUrl: string;
+    name: string;
+    description: string;
+    mood: string[];
+    genres: string[];
+    topArtists: string[];
+    trackCount: number;
+}
+
 export interface Message {
   id: string;
   text: string;
@@ -196,6 +206,7 @@ export interface Message {
   userSimulationData?: UserSimulationData;
   hexDumpData?: HexDumpData;
   vectorStatus?: VectorStatus;
+  playlistAnalysisData?: PlaylistAnalysisData;
   isLiveStream?: boolean;
   isLiveSyncUpdate?: boolean;
 }

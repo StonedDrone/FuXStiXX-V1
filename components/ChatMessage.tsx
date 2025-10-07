@@ -21,6 +21,7 @@ import HexView from './HexView';
 import { EditIcon } from './icons/EditIcon';
 import { SyncIcon } from './icons/SyncIcon';
 import VectorStatusView from './VectorStatusView';
+import PlaylistAnalysisView from './PlaylistAnalysisView';
 
 interface ChatMessageProps {
   message: Message;
@@ -237,6 +238,9 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEditMedia }) => {
         )}
         {message.hexDumpData && (
             <HexView data={message.hexDumpData} />
+        )}
+        {message.playlistAnalysisData && (
+            <PlaylistAnalysisView data={message.playlistAnalysisData} />
         )}
       </div>
     </div>

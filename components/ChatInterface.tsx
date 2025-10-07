@@ -1,11 +1,12 @@
 
 
 
+
 import React, { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { GoogleGenAI, Blob, LiveServerMessage, Modality } from "@google/genai";
 import { Message, Attachment, ActiveModel, DAG, LiveStreamState, HexDumpData } from '../types';
 import { CHECK_IN_PROMPT } from '../constants';
-import { sendMessageToAI, generateImageFromAI, generateVideoFromAI, generateAudioFromAI, resetChat, transcribeAudio, generateVRSceneFromAI, editImageFromAI, synthesizeNeRFFromImages, generateCreativeCodeFromAI, generateUIMockupFromAI, generateMotionFXFromAI, generateAlgorithmVisualizationFromAI, generateUserSimulationFromAI, generateIconFromAI, performDensePoseAnalysis, generate3DModelFromImage, generateGaussianDreamFromText } from '../services/geminiService';
+import { sendMessageToAI, generateImageFromAI, generateVideoFromAI, generateAudioFromAI, resetChat, transcribeAudio, generateVRSceneFromAI, editImageFromAI, synthesizeNeRFFromImages, generateCreativeCodeFromAI, generateUIMockupFromAI, generateMotionFXFromAI, generateAlgorithmVisualizationFromAI, generateUserSimulationFromAI, generateIconFromAI, performDensePoseAnalysis, generate3DModelFromImage, generateGaussianDreamFromText, analyzePlaylistFromAI } from '../services/geminiService';
 import * as hfService from '../services/huggingFaceService';
 import * as lmStudioService from '../services/lmStudioService';
 import * as financialService from '../services/financialService';
@@ -527,7 +528,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     const transcribeAudioPrefix = "Transcribe Audio";
     const ghostCodePrefix = "Ghost Code |";
     const financialPrefixes = ["Market Pulse |", "Sector Intel |", "Crypto Scan |", "Alpha Signal |"];
-    const analysisPrefixes = ["Neural Cartography |", "Visualize algorithm: ", "Simulate user journey for: ", "Design Deconstruction |", "Binary Scan", "Dense Scan"];
+    const analysisPrefixes = ["Neural Cartography |", "Visualize algorithm: ", "Simulate user journey for: ", "Design Deconstruction |", "Binary Scan", "Dense Scan", "Playlist Analysis |"];
     const automationPrefixes = ["Define DAG |", "Trigger DAG |", "DAG Status", "Clear All DAGs"];
     const streamingPrefixes = ["Live Intel Stream |", "Stop Intel Stream", "Screen Stream", "Engage Live Sync", "Disengage Live Sync"];
     const knowledgePrefixes = ["Index Source |", "Query Intel Base |", "Intel Base Status", "Purge Intel Base"];
@@ -1118,6 +1119,14 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
             const imageUrl = await performDensePoseAnalysis(base64Image, imageFile.type);
             if (isVoiceEnabled) speakText("Dense Scan complete.");
             setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "Dense Scan complete.", media: { type: 'densePose', prompt: command, status: 'complete', url: imageUrl } } : m));
+        } else if (command === 'Playlist Analysis') {
+            if (!params.url) throw new Error("Missing 'url' parameter for Playlist Analysis.");
+            loadingText = `Analyzing playlist from \`${params.url}\`...`;
+            setMessages(prev => [...prev, { id: aiResponseId, text: loadingText, sender: 'ai' }]);
+            const data = await analyzePlaylistFromAI(commandString);
+            const successText = `Playlist analysis complete for "${data.name}".`;
+            if (isVoiceEnabled) speakText(successText);
+            setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: successText, playlistAnalysisData: data } : m));
         }
         else {
             throw new Error('Unknown analysis command.');

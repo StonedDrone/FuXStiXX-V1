@@ -20,8 +20,12 @@ import { SpeakerOnIcon } from './icons/SpeakerOnIcon';
 import { SpeakerOffIcon } from './icons/SpeakerOffIcon';
 import { MicrophoneIcon } from './icons/MicrophoneIcon';
 import CameraView from './CameraView';
+import ObjectDetectionView from './ObjectDetectionView';
 import { useEmotionDetection } from '../hooks/useEmotionDetection';
+import { usePoseDetection } from '../hooks/usePoseDetection';
 import { FaceSmileIcon } from './icons/FaceSmileIcon';
+import { PersonStandingIcon } from './icons/PersonStandingIcon';
+import { ScanIcon } from './icons/ScanIcon';
 
 // --- Audio Utility Functions ---
 function encode(bytes: Uint8Array) {
@@ -121,15 +125,24 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
   const [liveStatus, setLiveStatus] = useState<LiveStatus>('idle');
   const [liveTranscripts, setLiveTranscripts] = useState<LiveTranscripts>({ user: '', ai: '' });
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [isScanViewOpen, setIsScanViewOpen] = useState(false);
   const { setTheme } = useUIState();
   const { 
-    isDetecting, 
+    isDetecting: isEmotionDetecting, 
     currentEmotion, 
     error: emotionError, 
-    startDetection, 
-    stopDetection,
+    startDetection: startEmotionDetection, 
+    stopDetection: stopEmotionDetection,
     isInitializing: isEmotionSensorInitializing
   } = useEmotionDetection();
+  const { 
+    isDetecting: isPoseDetecting, 
+    currentPose, 
+    error: poseError, 
+    startDetection: startPoseDetection, 
+    stopDetection: stopPoseDetection,
+    isInitializing: isPoseSensorInitializing
+  } = usePoseDetection();
 
 
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -138,6 +151,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
   const powersButtonRef = useRef<HTMLButtonElement>(null);
   const powersDropdownRef = useRef<HTMLDivElement>(null);
   const sendAfterCaptureRef = useRef(false);
+  const sendAfterScanRef = useRef(false);
   
   // Refs for live conversation resources
   const liveSessionPromiseRef = useRef<Promise<any> | null>(null);
@@ -197,10 +211,6 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
         // Ensure live conversation is stopped on unmount
         if (liveStatus !== 'idle') {
             stopLiveConversation();
-        }
-         // Ensure emotion detection is stopped on unmount
-        if (isDetecting) {
-            stopDetection();
         }
     };
   }, []);
@@ -490,9 +500,17 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
       } else {
         const parts: any[] = [];
         let generationPrompt = userMessageText.trim();
+        
+        const contextParts: string[] = [];
+        if (isEmotionDetecting && currentEmotion?.emotion) {
+            contextParts.push(`Captain seems ${currentEmotion.emotion}`);
+        }
+        if (isPoseDetecting && currentPose?.name) {
+            contextParts.push(`Captain's gesture: ${currentPose.name}`);
+        }
 
-        if (isDetecting && currentEmotion?.emotion) {
-            generationPrompt = `(Captain seems ${currentEmotion.emotion}) ${generationPrompt}`;
+        if (contextParts.length > 0) {
+            generationPrompt = `(${contextParts.join(', ')}) ${generationPrompt}`;
         }
 
         if (userMessageText.trim().startsWith(ghostCodePrefix)) {
@@ -560,12 +578,13 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     } finally {
       setIsLoading(false);
     }
-  }, [input, isLoading, attachments, messages, isOnline, setTheme, activeModel, isVoiceEnabled, speakText, setActiveModel, isDetecting, currentEmotion]);
+  }, [input, isLoading, attachments, messages, isOnline, setTheme, activeModel, isVoiceEnabled, speakText, setActiveModel, isEmotionDetecting, currentEmotion, isPoseDetecting, currentPose]);
 
   useEffect(() => {
-    if (sendAfterCaptureRef.current) {
+    if (sendAfterCaptureRef.current || sendAfterScanRef.current) {
         handleSend();
         sendAfterCaptureRef.current = false;
+        sendAfterScanRef.current = false;
     }
   }, [attachments, input, handleSend]);
 
@@ -576,6 +595,13 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     sendAfterCaptureRef.current = true;
   };
   
+  const handleScanReport = (objects: string[]) => {
+    const objectList = objects.length > 0 ? `\`${objects.join('`, `')}\`` : 'no objects';
+    setInput(`I've completed an environmental scan. Objects detected: ${objectList}. Provide a tactical analysis.`);
+    setIsScanViewOpen(false);
+    sendAfterScanRef.current = true;
+  };
+
   const handleHuggingFaceCommand = async (commandString: string) => {
     const aiResponseId = (Date.now() + 1).toString();
     let type: any, query: Record<string, any> = {}, loadingText: string;
@@ -725,21 +751,31 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     );
   };
 
-  const EmotionSensorDisplay = () => {
+  const SensorDisplay: React.FC<{
+    isDetecting: boolean;
+    isInitializing: boolean;
+    error: string | null;
+    currentValue: { name: string; score?: number } | null;
+    type: 'Emotion' | 'Pose';
+  }> = ({ isDetecting, isInitializing, error, currentValue, type }) => {
+    if (!isDetecting && !isInitializing && !error) return null;
+    
     let text = "Initializing...";
-    if (emotionError) text = "Sensor Error";
+    if (error) text = "Sensor Error";
     else if (isDetecting) {
-        if (currentEmotion) {
-            text = `${currentEmotion.emotion} (${(currentEmotion.score * 100).toFixed(0)}%)`;
+        if (currentValue) {
+            text = currentValue.score 
+                ? `${currentValue.name} (${(currentValue.score * 100).toFixed(0)}%)`
+                : currentValue.name;
         } else {
             text = "Detecting...";
         }
     }
     
     return (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-layer-1 px-3 py-1.5 rounded-lg text-xs flex items-center shadow-lg border border-layer-3 font-mono">
-            <span className={`mr-2 w-2 h-2 rounded-full ${emotionError ? 'bg-danger' : 'bg-primary'} ${isDetecting && 'animate-pulse'}`}></span>
-            <span className={emotionError ? 'text-danger' : 'text-secondary'}>{text}</span>
+        <div className="bg-layer-1 px-3 py-1 rounded-md text-xs flex items-center shadow-md border border-layer-3 font-mono">
+            <span className={`mr-2 w-2 h-2 rounded-full ${error ? 'bg-danger' : 'bg-primary'} ${isDetecting && 'animate-pulse'}`}></span>
+            <span className={error ? 'text-danger' : 'text-secondary'}>{type}: {text}</span>
         </div>
     );
 };
@@ -759,6 +795,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
       onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
     >
       {isCameraOpen && <CameraView onClose={() => setIsCameraOpen(false)} onCapture={handleCameraCapture} />}
+      {isScanViewOpen && <ObjectDetectionView onClose={() => setIsScanViewOpen(false)} onReport={handleScanReport} />}
       <div className="flex-1 overflow-y-auto pr-2">
         <div className="space-y-6">
           {messages.map((msg) => <ChatMessage key={msg.id} message={msg} />)}
@@ -801,7 +838,18 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
             </div>
         )}
         <div className="relative">
-             {(isDetecting || isEmotionSensorInitializing || emotionError) && <EmotionSensorDisplay />}
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 flex items-center space-x-2">
+                <SensorDisplay
+                    isDetecting={isEmotionDetecting} isInitializing={isEmotionSensorInitializing}
+                    error={emotionError} currentValue={currentEmotion ? { name: currentEmotion.emotion, score: currentEmotion.score } : null}
+                    type="Emotion"
+                />
+                <SensorDisplay
+                    isDetecting={isPoseDetecting} isInitializing={isPoseSensorInitializing}
+                    error={poseError} currentValue={currentPose ? { name: currentPose.name, score: currentPose.score } : null}
+                    type="Pose"
+                />
+            </div>
             <div className="relative flex items-center">
                 <div className="absolute left-3 flex items-center">
                     <button
@@ -815,7 +863,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
                 {liveStatus !== 'idle' ? <LiveStatusDisplay /> : (
                   <textarea ref={textAreaRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyPress={handleKeyPress}
                       placeholder={isOnline ? "Command your co-pilot..." : "System is offline..."}
-                      className="w-full bg-layer-1 border border-layer-3 rounded-lg p-3 pl-12 pr-[230px] text-gray-200 focus:outline-none focus:ring-2 focus:ring-accent resize-none font-mono text-sm disabled:opacity-50"
+                      className="w-full bg-layer-1 border border-layer-3 rounded-lg p-3 pl-12 pr-[290px] text-gray-200 focus:outline-none focus:ring-2 focus:ring-accent resize-none font-mono text-sm disabled:opacity-50"
                       rows={1} disabled={isLoading || !isOnline} />
                 )}
 
@@ -828,8 +876,14 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
                             <button onClick={() => setIsCameraOpen(true)} disabled={isLoading || !isOnline} className="p-2 rounded-full text-secondary disabled:text-layer-3 disabled:cursor-not-allowed hover:text-primary transition-colors duration-200" aria-label="Activate Live Vision" title="Activate Live Vision">
                                 <CameraIcon />
                             </button>
-                             <button onClick={() => isDetecting ? stopDetection() : startDetection()} disabled={isLoading || !isOnline || isEmotionSensorInitializing} className={`p-2 rounded-full transition-colors duration-200 ${isDetecting ? 'text-primary animate-pulse' : 'text-secondary'} disabled:text-layer-3 disabled:cursor-not-allowed hover:text-primary`} aria-label="Toggle Emotion Sensor" title="Toggle Emotion Sensor">
+                            <button onClick={() => isEmotionDetecting ? stopEmotionDetection() : startEmotionDetection()} disabled={isLoading || !isOnline || isEmotionSensorInitializing} className={`p-2 rounded-full transition-colors duration-200 ${isEmotionDetecting ? 'text-primary animate-pulse' : 'text-secondary'} disabled:text-layer-3 disabled:cursor-not-allowed hover:text-primary`} aria-label="Toggle Emotion Sensor" title="Toggle Emotion Sensor">
                                 <FaceSmileIcon />
+                            </button>
+                             <button onClick={() => isPoseDetecting ? stopPoseDetection() : startPoseDetection()} disabled={isLoading || !isOnline || isPoseSensorInitializing} className={`p-2 rounded-full transition-colors duration-200 ${isPoseDetecting ? 'text-primary animate-pulse' : 'text-secondary'} disabled:text-layer-3 disabled:cursor-not-allowed hover:text-primary`} aria-label="Toggle Kinetic Sensor" title="Toggle Kinetic Sensor">
+                                <PersonStandingIcon />
+                            </button>
+                             <button onClick={() => setIsScanViewOpen(true)} disabled={isLoading || !isOnline} className="p-2 rounded-full text-secondary disabled:text-layer-3 disabled:cursor-not-allowed hover:text-primary transition-colors duration-200" aria-label="Environmental Scanner" title="Environmental Scanner">
+                                <ScanIcon />
                             </button>
                             <button onClick={() => setIsVoiceEnabled(prev => !prev)} className={`p-2 rounded-full transition-colors duration-200 ${isVoiceEnabled ? 'text-primary' : 'text-secondary'} disabled:text-layer-3 disabled:cursor-not-allowed hover:text-primary`} aria-label="Toggle Voice Output" title="Toggle Voice Output">
                                 {isVoiceEnabled ? <SpeakerOnIcon /> : <SpeakerOffIcon />}

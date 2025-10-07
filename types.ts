@@ -50,3 +50,8 @@ export interface Emotion {
     emotion: string;
     score: number;
 }
+
+export interface Pose {
+    name: string;
+    score: number;
+}

@@ -13,6 +13,8 @@ const ai = new GoogleGenAI({ apiKey: API_KEY });
 // We'll manage a single chat session.
 let chat: Chat | null = null;
 
+const VALID_ASPECT_RATIOS = ["1:1", "3:4", "4:3", "9:16", "16:9"];
+
 const getChatSession = (history: Message[]): Chat => {
     if (chat) {
         return chat;
@@ -46,14 +48,16 @@ export const sendMessageToAI = async (history: Message[], currentUserMessagePart
   return result;
 };
 
-export const generateImageFromAI = async (prompt: string): Promise<string> => {
+export const generateImageFromAI = async (prompt: string, aspectRatio: string = '1:1'): Promise<string> => {
+    const validatedAspectRatio = VALID_ASPECT_RATIOS.includes(aspectRatio) ? aspectRatio : '1:1';
+
     const response = await ai.models.generateImages({
         model: 'imagen-4.0-generate-001',
         prompt: prompt,
         config: {
           numberOfImages: 1,
           outputMimeType: 'image/png',
-          aspectRatio: '1:1',
+          aspectRatio: validatedAspectRatio,
         },
     });
 

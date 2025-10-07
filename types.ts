@@ -39,3 +39,9 @@ export interface Track {
   playCount: number;
   lastPlayed: string | null;
 }
+
+export type ActiveModel = {
+    type: 'gemini' | 'huggingface' | 'lmstudio';
+    modelId: string;
+    baseURL?: string;
+};

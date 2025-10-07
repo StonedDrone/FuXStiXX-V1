@@ -18,7 +18,7 @@ export const SUPER_POWERS = [
 ];
 
 export const CREATIVE_POWERS = [
-    { name: "Image Forge", emoji: "🎨", color: "#A020F0", font: "font-sans", description: "Generates an image from a text prompt.", prompt: "Generate an image of: " },
+    { name: "Image Forge", emoji: "🎨", color: "#A020F0", font: "font-sans", description: "Generates an image from a text prompt. You can optionally specify an aspect ratio (1:1, 16:9, 9:16, 4:3, 3:4).", prompt: "Generate an image of: [your prompt] | aspectRatio: [e.g., 16:9]" },
     { name: "Video Synthesis", emoji: "🎥", color: "#FFA500", font: "font-mono", description: "Generates a video from a text prompt. This may take several minutes.", prompt: "Generate a video of: " },
     { name: "Sonic Synthesis", emoji: "🎵", color: "#1DB954", font: "font-sans", description: "Generates a musical track from a text prompt.", prompt: "Generate music of: " },
 ];

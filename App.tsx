@@ -22,6 +22,12 @@ const ThemedApp: React.FC = () => {
   const chatInterfaceRef = useRef<ChatInterfaceHandle>(null);
 
   useEffect(() => {
+    // This effect synchronizes the React theme state with the DOM `data-theme` attribute
+    // on the body, which drives the CSS variable changes for theming.
+    document.body.dataset.theme = theme;
+  }, [theme]);
+
+  useEffect(() => {
     // This effect runs once on mount to initialize the TensorFlow.js backend.
     // This resolves the "backend not initialized" warning and ensures AI vision
     // features are ready to go without delay when activated.
@@ -55,7 +61,7 @@ const ThemedApp: React.FC = () => {
   }, []);
 
   return (
-    <div id="app-container" className={`theme-${theme} h-screen w-screen bg-base text-secondary flex flex-col font-sans antialiased overflow-hidden`}>
+    <div id="app-container" className="h-screen w-screen bg-base text-secondary flex flex-col font-sans antialiased overflow-hidden">
       <Header
         onCodexToggle={handleCodexToggle}
         onPlaylistToggle={handlePlaylistToggle}

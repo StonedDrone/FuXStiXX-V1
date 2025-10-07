@@ -68,6 +68,16 @@ export async function searchModels(query: string): Promise<any> {
     return response.json();
 }
 
+export async function searchDatasets(query: string): Promise<any> {
+    const response = await fetch(`${HUB_API_URL_BASE}datasets?search=${encodeURIComponent(query)}&limit=10&full=true`, {
+        headers: { Authorization: `Bearer ${HF_TOKEN}` }
+    });
+    if (!response.ok) {
+        throw new Error(`Failed to search datasets: ${response.statusText}`);
+    }
+    return response.json();
+}
+
 export async function getSpaceInfo(spaceId: string, forceRefresh: boolean = false): Promise<any> {
     if (!forceRefresh) {
         const cachedData = getCachedSpaceInfo(spaceId);

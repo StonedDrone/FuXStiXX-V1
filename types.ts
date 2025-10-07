@@ -8,7 +8,7 @@ export interface Attachment {
     type: string;
 }
 
-export type HuggingFaceDataType = 'modelQuery' | 'modelSearch' | 'spaceInfo';
+export type HuggingFaceDataType = 'modelQuery' | 'modelSearch' | 'spaceInfo' | 'datasetSearch';
 
 export interface HuggingFaceResult {
     type: HuggingFaceDataType;
@@ -17,7 +17,7 @@ export interface HuggingFaceResult {
     error?: string;
 }
 
-export type FinancialDataType = 'stock' | 'news' | 'crypto';
+export type FinancialDataType = 'stock' | 'news' | 'crypto' | 'quant';
 
 export interface StockQuote {
     ticker: string;
@@ -44,9 +44,18 @@ export interface CryptoPrice {
     isPositive: boolean;
 }
 
+export interface QuantitativeMetrics {
+    ticker: string;
+    alpha: string;
+    beta: string;
+    sharpeRatio: string;
+    sentiment: 'Bullish' | 'Neutral' | 'Bearish';
+    recommendation: string;
+}
+
 export interface FinancialData {
     type: FinancialDataType;
-    data: StockQuote | NewsArticle[] | CryptoPrice;
+    data: StockQuote | NewsArticle[] | CryptoPrice | QuantitativeMetrics;
 }
 
 export type DAGRunStatus = 'running' | 'success' | 'failed' | 'scheduled';
@@ -113,6 +122,30 @@ export interface MissionData {
     missions: Mission[];
 }
 
+export interface NeuralNode {
+    id: string;
+    label: string;
+    type: 'input' | 'output' | 'conv' | 'dense' | 'attention' | 'other';
+}
+
+export interface NeuralLayer {
+    id: string;
+    name: string;
+    nodes: NeuralNode[];
+}
+
+export interface NeuralConnection {
+    from: string; // layer id
+    to: string; // layer id
+}
+
+export interface NeuralArchitectureData {
+    modelName: string;
+    layers: NeuralLayer[];
+    connections: NeuralConnection[];
+    summary: string;
+}
+
 export interface Message {
   id: string;
   text: string;
@@ -132,6 +165,7 @@ export interface Message {
   transcriptionData?: TranscriptionData;
   knowledgeBaseData?: KnowledgeBaseData;
   missionData?: MissionData;
+  neuralArchitectureData?: NeuralArchitectureData;
   isLiveStream?: boolean;
 }
 

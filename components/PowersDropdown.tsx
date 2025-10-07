@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { POWERS, SUPER_POWERS, CREATIVE_POWERS, HUGGING_FACE_POWERS, FINANCIAL_POWERS, AUTOMATION_POWERS, STREAMING_POWERS, INTEL_OPS_POWERS } from '../constants';
+import { POWERS, SUPER_POWERS, CREATIVE_POWERS, HUGGING_FACE_POWERS, FINANCIAL_POWERS, AUTOMATION_POWERS, STREAMING_POWERS, INTEL_OPS_POWERS, ANALYTICS_POWERS } from '../constants';
 
 type Power = typeof POWERS[0];
 
@@ -59,6 +59,7 @@ export const PowersDropdown: React.FC<PowersDropdownProps> = ({ onPowerClick, on
            <PowerSection title="Core Powers" powers={POWERS} onPowerClick={handlePowerSelection} />
            <PowerSection title="Super Powers" powers={SUPER_POWERS} onPowerClick={handlePowerSelection} />
            <PowerSection title="Creative Powers" powers={CREATIVE_POWERS} onPowerClick={handlePowerSelection} />
+           <PowerSection title="Analytics Powers" powers={ANALYTICS_POWERS} onPowerClick={handlePowerSelection} />
            <PowerSection title="Intel Ops" powers={INTEL_OPS_POWERS} onPowerClick={handlePowerSelection} />
            <PowerSection title="Automation Ops" powers={AUTOMATION_POWERS} onPowerClick={handlePowerSelection} />
            <PowerSection title="Streaming Ops" powers={STREAMING_POWERS} onPowerClick={handlePowerSelection} />

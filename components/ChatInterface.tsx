@@ -2,13 +2,14 @@ import React, { useState, useRef, useEffect, useCallback, forwardRef, useImperat
 import { GoogleGenAI, Blob, LiveServerMessage, Modality } from "@google/genai";
 import { Message, Attachment, ActiveModel, DAG, LiveStreamState } from '../types';
 import { CHECK_IN_PROMPT } from '../constants';
-import { sendMessageToAI, generateImageFromAI, generateVideoFromAI, generateAudioFromAI, resetChat, transcribeAudio, generateVRSceneFromAI } from '../services/geminiService';
+import { sendMessageToAI, generateImageFromAI, generateVideoFromAI, generateAudioFromAI, resetChat, transcribeAudio, generateVRSceneFromAI, editImageFromAI, synthesizeNeRFFromImages } from '../services/geminiService';
 import * as hfService from '../services/huggingFaceService';
 import * as lmStudioService from '../services/lmStudioService';
 import * as financialService from '../services/financialService';
 import * as workflowService from '../services/workflowService';
 import * as streamingService from '../services/streamingService';
 import * as knowledgeService from '../services/knowledgeService';
+import * as analysisService from '../services/analysisService';
 import ChatMessage from './ChatMessage';
 import { SendIcon } from './icons/SendIcon';
 import { CameraIcon } from './icons/CameraIcon';
@@ -481,12 +482,15 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     if ((!userMessageText.trim() && attachments.length === 0) || isLoading || !isOnline) return;
 
     const imagePromptPrefix = "Generate an image of: ";
+    const imageAlchemyPrefix = "Image Alchemy |";
     const videoPromptPrefix = "Generate a video of: ";
     const audioPromptPrefix = "Generate music of: ";
     const vrScenePromptPrefix = "Generate a VR scene of: ";
+    const realityForgePrefix = "Reality Forge";
     const transcribeAudioPrefix = "Transcribe Audio";
     const ghostCodePrefix = "Ghost Code |";
-    const financialPrefixes = ["Market Pulse |", "Sector Intel |", "Crypto Scan |"];
+    const financialPrefixes = ["Market Pulse |", "Sector Intel |", "Crypto Scan |", "Alpha Signal |"];
+    const analysisPrefixes = ["Neural Cartography |"];
     const automationPrefixes = ["Define DAG |", "Trigger DAG |", "DAG Status", "Clear All DAGs"];
     const streamingPrefixes = ["Live Intel Stream |", "Stop Intel Stream"];
     const knowledgePrefixes = ["Index Source |", "Query Intel Base |", "Intel Base Status", "Purge Intel Base"];
@@ -520,6 +524,9 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
       } else if (financialPrefixes.some(prefix => userMessageText.startsWith(prefix))) {
           await handleFinancialCommand(userMessageText);
       
+      } else if (analysisPrefixes.some(prefix => userMessageText.startsWith(prefix))) {
+            await handleAnalysisCommand(userMessageText);
+            
       } else if (automationPrefixes.some(prefix => userMessageText.startsWith(prefix))) {
             await handleAutomationCommand(userMessageText);
 
@@ -538,6 +545,19 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
           const transcription = await transcribeAudio(audioFile);
           if (isVoiceEnabled) speakText("Transcription complete.");
           setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "Transcription complete, Captain.", transcriptionData: { fileName: audioFile.name, transcription } } : m));
+      
+      } else if (userMessageText.startsWith(imageAlchemyPrefix)) {
+          if (attachments.length === 0 || !attachments[0].type.startsWith('image/')) {
+              throw new Error("Please attach an image file to use the Image Alchemy power.");
+          }
+          const { params } = parseCommand(userMessageText);
+          if (!params.prompt) throw new Error("Missing 'prompt' parameter for Image Alchemy.");
+          const imageFile = attachments[0];
+          setMessages(prev => [...prev, { id: aiResponseId, text: "Performing Image Alchemy...", sender: 'ai', media: { type: 'image', prompt: params.prompt, status: 'generating' } }]);
+          const base64Image = await fileToBase64(imageFile);
+          const imageUrl = await editImageFromAI(params.prompt, base64Image, imageFile.type);
+          if (isVoiceEnabled) speakText("Image Alchemy complete.");
+          setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "Image Alchemy complete.", media: { type: 'image', prompt: params.prompt, status: 'complete', url: imageUrl } } : m));
 
       } else if (userMessageText.startsWith(imagePromptPrefix)) {
           const content = userMessageText.substring(imagePromptPrefix.length);
@@ -573,6 +593,15 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
           if (isVoiceEnabled) speakText("VR scene generation complete.");
           setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "VR scene generation complete.", media: { type: 'vr', prompt, status: 'complete', content: sceneHtml } } : m));
       
+      } else if (userMessageText.startsWith(realityForgePrefix)) {
+          if (attachments.length < 2) {
+              throw new Error("Reality Forge requires at least 2 images from different angles, Captain.");
+          }
+          setMessages(prev => [...prev, { id: aiResponseId, text: "Synthesizing 3D reality from visual data...", sender: 'ai', media: { type: 'vr', prompt: userMessageText, status: 'generating' } }]);
+          const sceneHtml = await synthesizeNeRFFromImages(attachments);
+          if (isVoiceEnabled) speakText("Reality Forge synthesis complete.");
+          setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "Reality Forge synthesis complete.", media: { type: 'vr', prompt: userMessageText, status: 'complete', content: sceneHtml } } : m));
+
       } else {
         const parts: any[] = [];
         let generationPrompt = userMessageText.trim();
@@ -845,6 +874,36 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     }
 };
 
+  const handleAnalysisCommand = async (commandString: string) => {
+    const aiResponseId = (Date.now() + 1).toString();
+    const { command, params } = parseCommand(commandString);
+    let loadingText: string;
+
+    try {
+        if (command === 'Neural Cartography') {
+            if (!params.model) throw new Error("Missing 'model' parameter for Neural Cartography.");
+            loadingText = `Mapping neural pathways for model: \`${params.model}\`...`;
+            setMessages(prev => [...prev, { id: aiResponseId, text: loadingText, sender: 'ai' }]);
+            const data = await analysisService.analyzeModelArchitecture(params.model);
+            const successText = `Neural architecture map complete for ${data.modelName}.`;
+            if (isVoiceEnabled) speakText(successText);
+            setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: successText, neuralArchitectureData: data } : m));
+        } else {
+            throw new Error('Unknown analysis command.');
+        }
+    } catch (error: any) {
+        console.error('Analysis command failed:', error);
+        const failureText = `Analysis command failed, Captain: ${error.message}`;
+        if (isVoiceEnabled) speakText(failureText);
+        setMessages(prev => {
+            const existingMsg = prev.find(m => m.id === aiResponseId);
+            if (existingMsg) {
+                return prev.map(m => m.id === aiResponseId ? { ...m, status: 'error' as const, text: failureText } : m);
+            }
+            return [...prev, { id: aiResponseId, sender: 'ai', status: 'error' as const, text: failureText }];
+        });
+    }
+  };
 
   const handleFinancialCommand = async (commandString: string) => {
     const aiResponseId = (Date.now() + 1).toString();
@@ -870,6 +929,12 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
             setMessages(prev => [...prev, { id: aiResponseId, text: loadingText, sender: 'ai' }]);
             const data = await financialService.getCryptoPrice(params.symbol);
             setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "Crypto asset data acquired:", financialData: { type: 'crypto', data } } : m));
+        } else if (command === 'Alpha Signal') {
+            if (!params.ticker) throw new Error("Missing 'ticker' parameter for Alpha Signal.");
+            loadingText = `Calculating alpha signal for ${params.ticker.toUpperCase()}...`;
+            setMessages(prev => [...prev, { id: aiResponseId, text: loadingText, sender: 'ai' }]);
+            const data = await financialService.getQuantMetrics(params.ticker);
+            setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "Quantitative analysis complete.", financialData: { type: 'quant', data } } : m));
         } else {
             throw new Error('Unknown financial command.');
         }
@@ -905,6 +970,11 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
             if (!params.model || !params.prompt) throw new Error("Missing 'model' or 'prompt' parameter for Model Query.");
             query = { model: params.model, prompt: params.prompt };
             loadingText = `Querying model: \`${params.model}\`...`;
+        } else if (command === 'Dataset Scout') {
+            type = 'datasetSearch';
+            if (!params.query) throw new Error("Missing 'query' parameter for Dataset Scout.");
+            query = { query: params.query };
+            loadingText = `Scouting for datasets matching: \`${params.query}\`...`;
         } else if (command === 'Space Explorer' || command === 'Cache Space') {
             type = 'spaceInfo';
             if (!params.space) throw new Error(`Missing 'space' parameter for ${command}.`);
@@ -929,6 +999,8 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
         } else if (command === 'Model Query') {
             result = await hfService.queryModel(params.model, params.prompt);
             setActiveModel({ type: 'huggingface', modelId: params.model });
+        } else if (command === 'Dataset Scout') {
+            result = await hfService.searchDatasets(params.query);
         } else if (command === 'Space Explorer') {
             result = await hfService.getSpaceInfo(params.space, false);
         } else if (command === 'Cache Space') {

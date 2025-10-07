@@ -1,5 +1,5 @@
 import React from 'react';
-import { FinancialData, StockQuote, NewsArticle, CryptoPrice } from '../types';
+import { FinancialData, StockQuote, NewsArticle, CryptoPrice, QuantitativeMetrics } from '../types';
 import { TrendingUpIcon } from './icons/TrendingUpIcon';
 import { TrendingDownIcon } from './icons/TrendingDownIcon';
 
@@ -91,6 +91,41 @@ const CryptoView: React.FC<{ data: CryptoPrice }> = ({ data }) => {
     );
 };
 
+const QuantView: React.FC<{ data: QuantitativeMetrics }> = ({ data }) => {
+    const sentimentColor = {
+        Bullish: 'text-success',
+        Neutral: 'text-secondary',
+        Bearish: 'text-danger',
+    }[data.sentiment];
+
+    return (
+        <DataCard title={`Alpha Signal: ${data.ticker}`}>
+            <div className="space-y-2 font-mono text-sm">
+                <div className="flex justify-between">
+                    <span className="text-gray-400">Alpha:</span>
+                    <span className="text-secondary font-semibold">{data.alpha}</span>
+                </div>
+                <div className="flex justify-between">
+                    <span className="text-gray-400">Beta:</span>
+                    <span className="text-secondary font-semibold">{data.beta}</span>
+                </div>
+                <div className="flex justify-between">
+                    <span className="text-gray-400">Sharpe Ratio:</span>
+                    <span className="text-secondary font-semibold">{data.sharpeRatio}</span>
+                </div>
+                <div className="flex justify-between">
+                    <span className="text-gray-400">Market Sentiment:</span>
+                    <span className={`font-semibold ${sentimentColor}`}>{data.sentiment}</span>
+                </div>
+            </div>
+            <div className="mt-3 pt-3 border-t border-layer-3">
+                <p className="text-xs text-gray-400 font-mono mb-1">Recommendation:</p>
+                <p className="text-sm text-secondary">{data.recommendation}</p>
+            </div>
+        </DataCard>
+    );
+};
+
 
 const FinancialDataView: React.FC<{ data: FinancialData }> = ({ data }) => {
     switch (data.type) {
@@ -100,6 +135,8 @@ const FinancialDataView: React.FC<{ data: FinancialData }> = ({ data }) => {
             return <NewsView data={data.data as NewsArticle[]} />;
         case 'crypto':
             return <CryptoView data={data.data as CryptoPrice} />;
+        case 'quant':
+            return <QuantView data={data.data as QuantitativeMetrics} />;
         default:
             return <div className="text-danger">Unknown financial data format.</div>;
     }

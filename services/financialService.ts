@@ -1,4 +1,4 @@
-import { StockQuote, NewsArticle, CryptoPrice } from '../types';
+import { StockQuote, NewsArticle, CryptoPrice, QuantitativeMetrics } from '../types';
 
 // --- Mock Data ---
 
@@ -105,5 +105,27 @@ export const getCryptoPrice = async (symbol: string): Promise<CryptoPrice> => {
         price: formatNumber(price),
         change24h: `${isPositive ? '+' : ''}${change24h.toFixed(2)}%`,
         isPositive,
+    };
+};
+
+export const getQuantMetrics = async (ticker: string): Promise<QuantitativeMetrics> => {
+    await new Promise(resolve => setTimeout(resolve, getRandomFloat(800, 1500, 0)));
+    ticker = ticker.toUpperCase();
+
+    const sentiments: Array<'Bullish' | 'Neutral' | 'Bearish'> = ['Bullish', 'Neutral', 'Bearish'];
+    const recommendations = [
+        'Strong Buy: Asset shows significant upward potential.',
+        'Hold: Market conditions are uncertain; maintain current position.',
+        'Sell: Asset is overvalued with high downside risk.',
+        'Accumulate: Asset is undervalued; consider adding to position.'
+    ];
+
+    return {
+        ticker,
+        alpha: getRandomFloat(0.01, 0.2, 3).toString(),
+        beta: getRandomFloat(0.8, 1.5, 3).toString(),
+        sharpeRatio: getRandomFloat(1.1, 2.5, 3).toString(),
+        sentiment: sentiments[Math.floor(Math.random() * sentiments.length)],
+        recommendation: recommendations[Math.floor(Math.random() * recommendations.length)],
     };
 };

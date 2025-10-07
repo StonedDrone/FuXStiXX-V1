@@ -69,6 +69,28 @@ const ModelSearchResult: React.FC<{ data: HuggingFaceResultType }> = ({ data }) 
     </ResultCard>
 );
 
+const DatasetSearchResult: React.FC<{ data: HuggingFaceResultType }> = ({ data }) => (
+    <ResultCard title={`Dataset Search: "${data.query.query}"`}>
+        {data.result === null ? (
+            <div className="flex items-center space-x-2 text-secondary animate-pulse">
+                <LoaderIcon />
+                <span>Searching for datasets...</span>
+            </div>
+        ) : (
+            <div className="space-y-3">
+                {data.result?.slice(0, 5).map((dataset: any) => (
+                    <div key={dataset.id} className="border-b border-layer-3 pb-2 last:border-b-0">
+                        <a href={`https://huggingface.co/datasets/${dataset.id}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-semibold font-mono">{dataset.id}</a>
+                        <p className="text-xs text-secondary mt-1">❤️ {dataset.likes} | ⬇️ {dataset.downloads}</p>
+                        {dataset.description && <p className="text-xs text-gray-400 mt-1 truncate">{dataset.description}</p>}
+                    </div>
+                ))}
+                {data.result?.length === 0 && <p className="text-secondary">No datasets found.</p>}
+            </div>
+        )}
+    </ResultCard>
+);
+
 const SpaceInfoResult: React.FC<{ data: HuggingFaceResultType }> = ({ data }) => (
     <ResultCard title={`Space: ${data.query.space}`}>
         {data.result === null ? (
@@ -104,6 +126,8 @@ const HuggingFaceResult: React.FC<HuggingFaceResultProps> = ({ data }) => {
             return <ModelQueryResult data={data} />;
         case 'modelSearch':
             return <ModelSearchResult data={data} />;
+        case 'datasetSearch':
+            return <DatasetSearchResult data={data} />;
         case 'spaceInfo':
             return <SpaceInfoResult data={data} />;
         default:

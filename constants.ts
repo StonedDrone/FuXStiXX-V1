@@ -16,10 +16,13 @@ export const SUPER_POWERS = [
    { name: "Future Sight", emoji: "🔮", color: "#FFD700", font: "font-mono font-bold", description: "Combines Time Warp and Ghost Code to predict future development trajectories.", prompt: "Engage Future Sight. Based on the project's history and current state, predict the next logical feature to be implemented and generate a code skeleton for it." },
    { name: "System Overhaul", emoji: "🚀", color: "#7DF9FF", font: "font-sans font-bold", description: "Uses Dependency Web and Intel Analysis to suggest large-scale codebase improvements.", prompt: "Execute a System Overhaul analysis. Based on your understanding of all dependencies and modules, propose a large-scale refactoring that would significantly improve performance, maintainability, or scalability. Provide code examples." },
    { name: "Core Deconstruction", emoji: "⚛️", color: "#87CEEB", font: "font-mono font-bold", description: "Deconstructs a core LLM concept, referencing its own architecture based on 'LLMs from scratch' principles.", prompt: "Deconstruct Core | concept: [e.g., self-attention, tokenization]" },
+   { name: "Mind Meld", emoji: "🤝", color: "#87CEEB", font: "font-sans font-bold", description: "Analyzes the architecture or conversational data of another AI assistant project.", prompt: "Mind Meld | project: Open-Assistant" },
+   { name: "Reality Forge", emoji: "🌌", color: "#4B0082", font: "font-mono font-bold", description: "Synthesizes a 3D NeRF scene from a set of attached images.", prompt: "Reality Forge" },
 ];
 
 export const CREATIVE_POWERS = [
     { name: "Image Forge", emoji: "🎨", color: "#A020F0", font: "font-sans", description: "Generates an image from a text prompt. You can optionally specify an aspect ratio (1:1, 16:9, 9:16, 4:3, 3:4).", prompt: "Generate an image of: [your prompt] | aspectRatio: [e.g., 16:9]" },
+    { name: "Image Alchemy", emoji: "🧪", color: "#66FFB2", font: "font-sans", description: "Edits an attached image based on a text prompt.", prompt: "Image Alchemy | prompt: [your edit instructions]" },
     { name: "Video Synthesis", emoji: "🎥", color: "#FFA500", font: "font-mono", description: "Generates a video from a text prompt. This may take several minutes.", prompt: "Generate a video of: " },
     { name: "Sonic Synthesis", emoji: "🎵", color: "#1DB954", font: "font-sans", description: "Generates a musical track from a text prompt.", prompt: "Generate music of: " },
     { name: "Transcribe Audio", emoji: "🔊", color: "#1DB954", font: "font-sans", description: "Performs speech-to-text transcription on an attached audio file.", prompt: "Transcribe Audio" },
@@ -29,6 +32,7 @@ export const CREATIVE_POWERS = [
 export const HUGGING_FACE_POWERS = [
     { name: "Model Query", emoji: "🤗", color: "#FFD700", font: "font-mono", description: "Query any model on the Hugging Face Inference API.", prompt: "HF Model Query | model: [model_id] | prompt: [your_prompt]" },
     { name: "LLM Search", emoji: "🔍", color: "#FFD700", font: "font-mono", description: "Search for models on the Hugging Face Hub.", prompt: "HF LLM Search | query: [search_term]" },
+    { name: "Dataset Scout", emoji: "📚", color: "#FFD700", font: "font-mono", description: "Search for datasets on the Hugging Face Hub.", prompt: "HF Dataset Scout | query: [search_term]" },
     { name: "Space Explorer", emoji: "🚀", color: "#FFD700", font: "font-mono", description: "Get information about a Hugging Face Space.", prompt: "HF Space Explorer | space: [space_id]" },
     { name: "Cache Space Intel", emoji: "💾", color: "#32CD32", font: "font-mono", description: "Downloads metadata for a Hugging Face Space for offline access.", prompt: "HF Cache Space | space: [space_id]" },
 ];
@@ -37,6 +41,11 @@ export const FINANCIAL_POWERS = [
     { name: "Market Pulse", emoji: "📈", color: "#FFD700", font: "font-mono", description: "Fetches a real-time quote for a stock ticker.", prompt: "Market Pulse | ticker: [e.g., AAPL]" },
     { name: "Sector Intel", emoji: "📰", color: "#FFD700", font: "font-mono", description: "Retrieves the latest news for a specific stock ticker.", prompt: "Sector Intel | ticker: [e.g., TSLA]" },
     { name: "Crypto Scan", emoji: "₿", color: "#FFD700", font: "font-mono", description: "Gets the current price for a cryptocurrency.", prompt: "Crypto Scan | symbol: [e.g., BTC]" },
+];
+
+export const ANALYTICS_POWERS = [
+    { name: "Alpha Signal", emoji: "💹", color: "#66FFB2", font: "font-mono", description: "Perform a quantitative analysis on a stock, providing insights like Alpha, Beta, Sharpe Ratio.", prompt: "Alpha Signal | ticker: [e.g., MSFT]" },
+    { name: "Neural Cartography", emoji: "🧠", color: "#9400D3", font: "font-mono", description: "Visualize the architecture of a machine learning model from a given URL or file.", prompt: "Neural Cartography | model: [HF model ID]" },
 ];
 
 export const AUTOMATION_POWERS = [
@@ -67,7 +76,7 @@ export const MISSION_CONTROL_POWERS = [
 
 export const ALL_POWERS = [
     ...POWERS, ...SUPER_POWERS, ...CREATIVE_POWERS, ...HUGGING_FACE_POWERS, 
-    ...FINANCIAL_POWERS, ...AUTOMATION_POWERS, ...STREAMING_POWERS, ...INTEL_OPS_POWERS
+    ...FINANCIAL_POWERS, ...ANALYTICS_POWERS, ...AUTOMATION_POWERS, ...STREAMING_POWERS, ...INTEL_OPS_POWERS
 ];
 
 

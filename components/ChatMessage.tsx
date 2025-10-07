@@ -9,6 +9,7 @@ import FinancialDataView from './FinancialDataView';
 import WorkflowDataView from './WorkflowDataView';
 import TranscriptionView from './TranscriptionView';
 import KnowledgeBaseView from './KnowledgeBaseView';
+import NeuralArchitectureView from './NeuralArchitectureView';
 import { StreamIcon } from './icons/StreamIcon';
 import VRSceneViewer from './VRSceneViewer';
 
@@ -138,6 +139,9 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
         )}
         {message.knowledgeBaseData && (
             <KnowledgeBaseView data={message.knowledgeBaseData} />
+        )}
+        {message.neuralArchitectureData && (
+            <NeuralArchitectureView data={message.neuralArchitectureData} />
         )}
       </div>
     </div>

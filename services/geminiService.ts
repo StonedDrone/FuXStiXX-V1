@@ -1,4 +1,4 @@
-import { GoogleGenAI, Part, Content, Chat } from "@google/genai";
+import { GoogleGenAI, Part, Content, Chat, Modality } from "@google/genai";
 import { AI_PERSONA_INSTRUCTION } from '../constants';
 import { Message } from '../types';
 
@@ -64,6 +64,30 @@ export const generateImageFromAI = async (prompt: string, aspectRatio: string = 
     const base64ImageBytes: string = response.generatedImages[0].image.imageBytes;
     return `data:image/png;base64,${base64ImageBytes}`;
 }
+
+export const editImageFromAI = async (prompt: string, base64ImageData: string, mimeType: string): Promise<string> => {
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-image',
+        contents: {
+            parts: [
+                { inlineData: { data: base64ImageData, mimeType: mimeType } },
+                { text: prompt },
+            ],
+        },
+        config: {
+            responseModalities: [Modality.IMAGE, Modality.TEXT],
+        },
+    });
+
+    for (const part of response.candidates[0].content.parts) {
+        if (part.inlineData) {
+            const base64ImageBytes: string = part.inlineData.data;
+            return `data:${part.inlineData.mimeType};base64,${base64ImageBytes}`;
+        }
+    }
+
+    throw new Error("Image Alchemy failed: The AI did not return an image.");
+};
 
 export const generateVideoFromAI = async (prompt: string): Promise<string> => {
     let operation = await ai.models.generateVideos({
@@ -135,6 +159,30 @@ export const generateVRSceneFromAI = async (prompt: string): Promise<string> => 
     
     // If no markdown block is found, assume the whole response is the code.
     return rawText.trim();
+};
+
+export const synthesizeNeRFFromImages = async (files: File[]): Promise<string> => {
+    console.log(`Simulating NeRF synthesis for ${files.length} images.`);
+    // Simulate a longer processing time for this "super power"
+    await new Promise(resolve => setTimeout(resolve, 12000));
+
+    // Randomly fail to show error handling
+    if (Math.random() < 0.2) {
+        throw new Error("Simulated NeRF synthesis failed. Could not converge on a solution.");
+    }
+
+    // Return a pre-canned A-Frame scene that looks like a point cloud
+    return `
+        <a-scene>
+            <a-sky color="#111"></a-sky>
+            <a-entity position="0 1.5 -2">
+                <a-entity id="points" particle-system="preset: dust; particleCount: 5000; color: #FFF, #32CD32"></a-entity>
+                <a-animation attribute="rotation" to="0 360 0" dur="20000" repeat="indefinite" easing="linear"></a-animation>
+            </a-entity>
+            <a-light type="ambient" color="#888"></a-light>
+            <a-light type="point" intensity="0.5" position="2 4 4"></a-light>
+        </a-scene>
+    `;
 };
 
 export const transcribeAudio = async (file: File): Promise<string> => {

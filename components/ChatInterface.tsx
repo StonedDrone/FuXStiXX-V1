@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { GoogleGenAI, Blob, LiveServerMessage, Modality } from "@google/genai";
 import { Message, Attachment, ActiveModel, DAG, LiveStreamState, HexDumpData } from '../types';
@@ -755,6 +756,32 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     sendAfterScanRef.current = true;
   };
 
+  const dataUrlToFile = async (dataUrl: string, filename: string): Promise<File> => {
+    const res = await fetch(dataUrl);
+    const blob = await res.blob();
+    return new File([blob], filename, { type: blob.type });
+  };
+
+  const handleEditMedia = useCallback(async (message: Message) => {
+    if (!message.media) return;
+
+    if (message.media.type === 'image' && message.media.url) {
+      try {
+        const file = await dataUrlToFile(message.media.url, `edit-${Date.now()}.png`);
+        setAttachments([file]);
+        setInput('Image Alchemy | prompt: ');
+        textAreaRef.current?.focus();
+      } catch (error) {
+        console.error("Failed to prepare image for editing:", error);
+      }
+    } else if (message.media.type === 'video') {
+      // For video, we re-use the original prompt for modification.
+      setInput(`Generate a video of: ${message.media.prompt}`);
+      setAttachments([]);
+      textAreaRef.current?.focus();
+    }
+  }, []);
+
   const handleKnowledgeCommand = async (userMessage: Message) => {
     const aiResponseId = (Date.now() + 1).toString();
     const commandString = userMessage.text;
@@ -1268,7 +1295,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
 
       <div className="flex-1 overflow-y-auto pr-2 pt-12">
         <div className="space-y-6">
-          {messages.map((msg) => <ChatMessage key={msg.id} message={msg} />)}
+          {messages.map((msg) => <ChatMessage key={msg.id} message={msg} onEditMedia={handleEditMedia} />)}
         </div>
         <div ref={chatEndRef} />
       </div>

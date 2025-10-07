@@ -18,12 +18,14 @@ import UIMockupViewer from './UIMockupViewer';
 import MotionFXViewer from './MotionFXViewer';
 import AlgorithmVisualizer from './AlgorithmVisualizer';
 import HexView from './HexView';
+import { EditIcon } from './icons/EditIcon';
 
 interface ChatMessageProps {
   message: Message;
+  onEditMedia: (message: Message) => void;
 }
 
-const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
+const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEditMedia }) => {
   const isAI = message.sender === 'ai';
   // FIX: Corrected typo in type from HTMLDivDivElement to HTMLDivElement.
   const contentRef = useRef<HTMLDivElement>(null);
@@ -121,11 +123,23 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
                             </span>
                         </div>
                     )}
-                    {message.media.status === 'complete' && message.media.type === 'image' && message.media.url && (
-                        <img src={message.media.url} alt={message.media.prompt} className="rounded-lg max-w-full sm:max-w-sm border-2 border-layer-3" />
-                    )}
-                    {message.media.status === 'complete' && message.media.type === 'video' && message.media.url && (
-                        <video src={message.media.url} controls className="rounded-lg max-w-full sm:max-w-sm border-2 border-layer-3" />
+                    {message.media.status === 'complete' && (message.media.type === 'image' || message.media.type === 'video') && (
+                        <div className="inline-block relative group">
+                            {message.media.type === 'image' && message.media.url && (
+                                <img src={message.media.url} alt={message.media.prompt} className="rounded-lg max-w-full sm:max-w-sm border-2 border-layer-3" />
+                            )}
+                            {message.media.type === 'video' && message.media.url && (
+                                <video src={message.media.url} controls className="rounded-lg max-w-full sm:max-w-sm border-2 border-layer-3" />
+                            )}
+                            <button
+                                onClick={() => onEditMedia(message)}
+                                className="absolute top-2 right-2 p-2 rounded-full bg-base/50 text-secondary hover:bg-base hover:text-primary transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                aria-label="Edit this media"
+                                title="Edit this media"
+                            >
+                                <EditIcon />
+                            </button>
+                        </div>
                     )}
                     {message.media.status === 'complete' && message.media.type === 'audio' && message.media.url && (
                         <audio src={message.media.url} controls className="w-full sm:max-w-sm" />

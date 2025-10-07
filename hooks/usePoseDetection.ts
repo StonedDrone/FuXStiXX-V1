@@ -1,3 +1,4 @@
+
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Pose } from '../types';
 
@@ -99,12 +100,7 @@ export const usePoseDetection = () => {
         setCurrentPose(null);
 
         try {
-            if (!humanRef.current) {
-                humanRef.current = new Human(humanConfig);
-                await humanRef.current.load();
-                console.log("Human library loaded for pose detection.");
-            }
-            
+            // Get camera stream FIRST to ensure availability before loading the library.
             if (!navigator.mediaDevices?.getUserMedia) {
                 throw new Error("Camera not supported by your browser.");
             }
@@ -112,6 +108,7 @@ export const usePoseDetection = () => {
                 video: { width: { ideal: 640 }, height: { ideal: 480 } } 
             });
 
+            // Set up hidden video element now that we have the stream.
             if (!videoRef.current) {
                 videoRef.current = document.createElement('video');
                 videoRef.current.style.display = 'none';
@@ -120,6 +117,13 @@ export const usePoseDetection = () => {
             videoRef.current.srcObject = streamRef.current;
             await videoRef.current.play();
 
+            // Initialize Human library now that the video stream is active.
+            if (!humanRef.current) {
+                humanRef.current = new Human(humanConfig);
+                await humanRef.current.load();
+                console.log("Human library loaded for pose detection.");
+            }
+            
             setIsDetecting(true);
             setIsInitializing(false);
             console.log("Pose detection started.");

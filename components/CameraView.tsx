@@ -75,8 +75,12 @@ const CameraView: React.FC<CameraViewProps> = ({ onClose, onCapture }) => {
                 </button>
             </div>
             <div className="mt-6 flex items-center space-x-6">
-                <button onClick={handleCapture} disabled={!!error || isLoading} className="p-6 rounded-full bg-primary text-black hover:scale-105 transition-transform disabled:bg-layer-3 disabled:cursor-not-allowed" aria-label="Capture Frame" title="Capture Frame">
+                <button onClick={onClose} className="px-6 py-3 bg-layer-2 border border-layer-3 rounded-lg text-sm font-bold text-secondary hover:bg-layer-3 transition-colors">
+                    Cancel
+                </button>
+                <button onClick={handleCapture} disabled={!!error || isLoading} className="p-3 px-6 bg-primary text-black hover:scale-105 transition-transform disabled:bg-layer-3 disabled:cursor-not-allowed flex items-center space-x-2 font-bold rounded-lg" aria-label="Capture Frame" title="Capture Frame">
                     <CameraIcon />
+                    <span>Capture Frame</span>
                 </button>
             </div>
         </div>

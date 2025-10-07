@@ -12,6 +12,7 @@ import * as workflowService from '../services/workflowService';
 import * as streamingService from '../services/streamingService';
 import * as knowledgeService from '../services/knowledgeService';
 import * as analysisService from '../services/analysisService';
+import * as liveSyncService from '../services/liveSyncService';
 import ChatMessage from './ChatMessage';
 import { SendIcon } from './icons/SendIcon';
 import { CameraIcon } from './icons/CameraIcon';
@@ -36,6 +37,7 @@ import { ScanIcon } from './icons/ScanIcon';
 import WorkflowStatus from './WorkflowStatus';
 import LiveStreamStatus from './LiveStreamStatus';
 import ScreenStreamView from './ScreenStreamView';
+import LiveSyncStatus from './LiveSyncStatus';
 
 // --- Audio Utility Functions ---
 function encode(bytes: Uint8Array) {
@@ -140,6 +142,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
   const [isScreenStreamOpen, setIsScreenStreamOpen] = useState(false);
   const [dags, setDags] = useState<DAG[]>([]);
   const [liveStreamState, setLiveStreamState] = useState<LiveStreamState>({ source: null, status: 'idle' });
+  const [isLiveSyncActive, setIsLiveSyncActive] = useState(false);
 
   const { setTheme } = useUIState();
   const { 
@@ -248,6 +251,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
         }
         // Ensure intel stream is stopped on unmount
         streamingService.stop();
+        liveSyncService.stop();
     };
   }, []);
   
@@ -520,7 +524,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     const financialPrefixes = ["Market Pulse |", "Sector Intel |", "Crypto Scan |", "Alpha Signal |"];
     const analysisPrefixes = ["Neural Cartography |", "Visualize algorithm: ", "Simulate user journey for: ", "Design Deconstruction |", "Binary Scan"];
     const automationPrefixes = ["Define DAG |", "Trigger DAG |", "DAG Status", "Clear All DAGs"];
-    const streamingPrefixes = ["Live Intel Stream |", "Stop Intel Stream", "Screen Stream"];
+    const streamingPrefixes = ["Live Intel Stream |", "Stop Intel Stream", "Screen Stream", "Engage Live Sync", "Disengage Live Sync"];
     const knowledgePrefixes = ["Index Source |", "Query Intel Base |", "Intel Base Status", "Purge Intel Base"];
 
     const messageAttachments: Attachment[] = attachments.map(file => ({ name: file.name, type: file.type }));
@@ -899,6 +903,30 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
             responseText = `Acknowledged. Terminating the live feed from '${liveStreamState.source}'. Standing by.`;
             streamingService.stop();
             setLiveStreamState({ source: null, status: 'idle' });
+        }
+    } else if (command === 'Engage Live Sync') {
+        if (isLiveSyncActive) {
+            responseText = "Live sync is already engaged, Captain.";
+        } else {
+            responseText = "Acknowledged. Engaging real-time codebase sync. I will report any changes automatically.";
+            setIsLiveSyncActive(true);
+            liveSyncService.start(async (update) => {
+                await knowledgeService.addDocument(update.fileName, 'file', update.content);
+                setMessages(prev => [...prev, {
+                    id: Date.now().toString(),
+                    text: `**Detected change in \`${update.fileName}\`:**\n> ${update.summary}\n\nRe-indexing of the source is complete.`,
+                    sender: 'ai',
+                    isLiveSyncUpdate: true,
+                }]);
+            });
+        }
+    } else if (command === 'Disengage Live Sync') {
+        if (!isLiveSyncActive) {
+            responseText = "Live sync is not currently active.";
+        } else {
+            responseText = "Acknowledged. Disengaging live codebase sync.";
+            setIsLiveSyncActive(false);
+            liveSyncService.stop();
         }
     } else {
         responseText = "Unknown streaming command.";
@@ -1288,12 +1316,15 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
       {isScanViewOpen && <ObjectDetectionView onClose={() => setIsScanViewOpen(false)} onReport={handleScanReport} />}
       {isScreenStreamOpen && <ScreenStreamView onClose={handleScreenStreamClose} />}
       
-      <div className="absolute top-4 left-4 right-4 flex justify-between items-center z-10 pointer-events-none">
-        <LiveStreamStatus streamState={liveStreamState} />
+      <div className="absolute top-4 left-4 right-4 flex justify-between items-start z-10 pointer-events-none">
+        <div className="flex items-center space-x-2">
+            <LiveStreamStatus streamState={liveStreamState} />
+            <LiveSyncStatus isActive={isLiveSyncActive} />
+        </div>
         <WorkflowStatus dags={dags} />
       </div>
 
-      <div className="flex-1 overflow-y-auto pr-2 pt-12">
+      <div className="flex-1 overflow-y-auto pr-2 pt-16">
         <div className="space-y-6">
           {messages.map((msg) => <ChatMessage key={msg.id} message={msg} onEditMedia={handleEditMedia} />)}
         </div>

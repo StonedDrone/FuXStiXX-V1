@@ -132,7 +132,10 @@ const ObjectDetectionView: React.FC<ObjectDetectionViewProps> = ({ onClose, onRe
                 </button>
             </div>
             <div className="mt-6 flex items-center space-x-6">
-                 <button onClick={handleReport} disabled={!!error || isLoading || detectedObjects.length === 0} className="p-4 rounded-full bg-primary text-black hover:scale-105 transition-transform disabled:bg-layer-3 disabled:cursor-not-allowed flex items-center space-x-2 font-bold" aria-label="Analyze and Report" title="Analyze and Report">
+                <button onClick={onClose} className="px-6 py-3 bg-layer-2 border border-layer-3 rounded-lg text-sm font-bold text-secondary hover:bg-layer-3 transition-colors">
+                    Cancel
+                </button>
+                 <button onClick={handleReport} disabled={!!error || isLoading || detectedObjects.length === 0} className="p-3 px-6 bg-primary text-black hover:scale-105 transition-transform disabled:bg-layer-3 disabled:cursor-not-allowed flex items-center space-x-2 font-bold rounded-lg" aria-label="Analyze and Report" title="Analyze and Report">
                     <ScanIcon />
                     <span>Analyze & Report</span>
                 </button>

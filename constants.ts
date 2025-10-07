@@ -67,6 +67,8 @@ export const STREAMING_POWERS = [
     { name: "Live Intel Stream", emoji: "📡", color: "#66FFB2", font: "font-mono", description: "Establishes a real-time data stream from a source for live analysis.", prompt: "Live Intel Stream | source: [e.g., system.log]" },
     { name: "Stop Intel Stream", emoji: "🛑", color: "#FF4500", font: "font-mono", description: "Terminates the active intel stream.", prompt: "Stop Intel Stream" },
     { name: "Screen Stream", emoji: "🖥️", color: "#66FFB2", font: "font-mono", description: "Allows FuXStiXX to observe your screen in real-time.", prompt: "Screen Stream" },
+    { name: "Engage Live Sync", emoji: "🔗", color: "#66FFB2", font: "font-mono", description: "Establishes a real-time link to the codebase, automatically analyzing changes.", prompt: "Engage Live Sync" },
+    { name: "Disengage Live Sync", emoji: "🔌", color: "#FF4500", font: "font-mono", description: "Disconnects the real-time link to the codebase.", prompt: "Disengage Live Sync" },
 ];
 
 export const INTEL_OPS_POWERS = [

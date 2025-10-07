@@ -19,6 +19,7 @@ import MotionFXViewer from './MotionFXViewer';
 import AlgorithmVisualizer from './AlgorithmVisualizer';
 import HexView from './HexView';
 import { EditIcon } from './icons/EditIcon';
+import { SyncIcon } from './icons/SyncIcon';
 
 interface ChatMessageProps {
   message: Message;
@@ -47,6 +48,9 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEditMedia }) => {
     if (message.isLiveStream) {
         return <div className={`${iconClass} bg-green-500/50 text-black`}><StreamIcon /></div>
     }
+    if (message.isLiveSyncUpdate) {
+        return <div className={`${iconClass} bg-blue-500/50 text-black`}><SyncIcon /></div>
+    }
     if (sender === 'ai') {
         return <div className={`${iconClass} bg-accent text-black`}><BotIcon /></div>
     }
@@ -61,6 +65,8 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEditMedia }) => {
       <div className={`w-full max-w-2xl px-4 py-3 rounded-lg ${
         message.isLiveStream
         ? 'bg-layer-1 border border-dashed border-green-500/50'
+        : message.isLiveSyncUpdate
+        ? 'bg-layer-1 border border-dashed border-blue-500/50'
         : isAI 
         ? 'bg-layer-1' 
         : 'bg-accent text-black'

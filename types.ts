@@ -187,6 +187,7 @@ export interface Message {
   userSimulationData?: UserSimulationData;
   hexDumpData?: HexDumpData;
   isLiveStream?: boolean;
+  isLiveSyncUpdate?: boolean;
 }
 
 export interface Track {

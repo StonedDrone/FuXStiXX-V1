@@ -146,6 +146,24 @@ export interface NeuralArchitectureData {
     summary: string;
 }
 
+export interface UserJourneyStep {
+    action: string;
+    description: string;
+    outcome: 'success' | 'failure' | 'neutral';
+}
+export interface UserSimulationData {
+    persona: string;
+    goal: string;
+    journey: UserJourneyStep[];
+    summary: string;
+}
+
+export interface HexDumpData {
+  fileName: string;
+  hex: string;
+  ascii: string;
+}
+
 export interface Message {
   id: string;
   text: string;
@@ -153,7 +171,7 @@ export interface Message {
   attachments?: Attachment[];
   status?: 'generating' | 'complete' | 'error';
   media?: {
-    type: 'image' | 'video' | 'audio' | 'vr';
+    type: 'image' | 'video' | 'audio' | 'vr' | 'creativeCode' | 'uiMockup' | 'motionFx' | 'algoVisualization';
     url?: string;
     content?: string;
     prompt: string;
@@ -166,6 +184,8 @@ export interface Message {
   knowledgeBaseData?: KnowledgeBaseData;
   missionData?: MissionData;
   neuralArchitectureData?: NeuralArchitectureData;
+  userSimulationData?: UserSimulationData;
+  hexDumpData?: HexDumpData;
   isLiveStream?: boolean;
 }
 

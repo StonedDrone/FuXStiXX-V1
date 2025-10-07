@@ -1,6 +1,6 @@
-import { GoogleGenAI, Part, Content, Chat, Modality } from "@google/genai";
+import { GoogleGenAI, Part, Content, Chat, Modality, Type } from "@google/genai";
 import { AI_PERSONA_INSTRUCTION } from '../constants';
-import { Message } from '../types';
+import { Message, UserSimulationData } from '../types';
 
 const API_KEY = process.env.API_KEY;
 
@@ -159,6 +159,164 @@ export const generateVRSceneFromAI = async (prompt: string): Promise<string> => 
     
     // If no markdown block is found, assume the whole response is the code.
     return rawText.trim();
+};
+
+export const generateCreativeCodeFromAI = async (prompt: string): Promise<string> => {
+    const creativeCodeSystemInstruction = `You are an expert p5.js developer. Your task is to generate a complete, single p5.js sketch based on the user's request.
+- The output MUST be only the p5.js JavaScript code.
+- Do NOT include \`<html>\`, \`<head>\`, \`<body>\`, or \`<script>\` tags.
+- The code must be self-contained and include both \`setup()\` and \`draw()\` functions.
+- The canvas should be created with \`createCanvas(400, 400)\` in the \`setup\` function.
+- Make the sketch visually interesting, animated, and interactive (e.g., using \`mouseX\`, \`mouseY\`).
+- The final output should be a single block of JavaScript code.`;
+
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+            systemInstruction: creativeCodeSystemInstruction,
+        }
+    });
+
+    // Clean markdown code blocks if present
+    const rawText = response.text;
+    const codeBlockRegex = /```(?:javascript|js)?\s*([\s\S]*?)\s*```/;
+    const match = rawText.match(codeBlockRegex);
+
+    if (match && match[1]) {
+        return match[1].trim();
+    }
+    
+    return rawText.trim();
+};
+
+export const generateUIMockupFromAI = async (prompt: string): Promise<string> => {
+    const uiMockupSystemInstruction = `You are an expert UI/UX designer and frontend developer. Your task is to generate a single, self-contained HTML file that represents a UI component based on the user's prompt.
+- The output MUST be a complete HTML structure.
+- All CSS MUST be included within a \`<style>\` tag in the \`<head>\`. Do NOT use external stylesheets.
+- Use modern, clean design principles. Use flexbox or grid for layout.
+- Use placeholder content where necessary (e.g., "Lorem ipsum", placeholder images from unsplash.com).
+- The component should be visually appealing and responsive.
+- Do NOT include any JavaScript (\`<script>\` tags). The mockup is for visual purposes only.
+- The final output should be a single block of HTML code, starting with \`<!DOCTYPE html>\`.`;
+
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+            systemInstruction: uiMockupSystemInstruction,
+        }
+    });
+
+    // Clean markdown code blocks if present
+    const rawText = response.text;
+    const codeBlockRegex = /```(?:html)?\s*([\s\S]*?)\s*```/;
+    const match = rawText.match(codeBlockRegex);
+
+    if (match && match[1]) {
+        return match[1].trim();
+    }
+    
+    return rawText.trim();
+};
+
+export const generateMotionFXFromAI = async (prompt: string): Promise<string> => {
+    const motionFXSystemInstruction = `You are a motion graphics expert specializing in mojs. Your task is to generate a single, self-contained HTML file that creates a beautiful animation based on the user's prompt.
+- The output MUST be a complete HTML structure.
+- The mojs library MUST be included from the CDN: \`<script src="https://cdn.jsdelivr.net/npm/@mojs/core"></script>\`.
+- The animation should be triggered automatically on load and ideally replay when the container is clicked.
+- All CSS and JavaScript MUST be included within the HTML file in \`<style>\` and \`<script>\` tags.
+- The animation should be centered in the body. Make the background a dark color (e.g., #111).
+- The final output should be a single block of HTML code, starting with \`<!DOCTYPE html>\`.`;
+
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+            systemInstruction: motionFXSystemInstruction,
+        }
+    });
+
+    const rawText = response.text;
+    const codeBlockRegex = /```(?:html)?\s*([\s\S]*?)\s*```/;
+    const match = rawText.match(codeBlockRegex);
+
+    if (match && match[1]) {
+        return match[1].trim();
+    }
+    
+    return rawText.trim();
+};
+
+export const generateAlgorithmVisualizationFromAI = async (prompt: string): Promise<string> => {
+    const algoVisSystemInstruction = `You are an expert in data structures and algorithms, and a skilled frontend developer. Your task is to generate a single, self-contained HTML file that visualizes the algorithm specified by the user.
+- The output MUST be a complete HTML structure.
+- All CSS and JavaScript MUST be included within the file in \`<style>\` and \`<script>\` tags.
+- The visualization should be animated and clearly show the step-by-step process of the algorithm.
+- For sorting algorithms, visualize an array of bars of different heights being sorted.
+- The visualization should be clean, easy to understand, and visually appealing. Use a dark theme.
+- The visualization should start automatically on load and have simple controls (e.g., a "Restart" button).
+- The final output should be a single block of HTML code, starting with \`<!DOCTYPE html>\`.`;
+
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: `Create a visualization for: ${prompt}`,
+        config: {
+            systemInstruction: algoVisSystemInstruction,
+        }
+    });
+
+    const rawText = response.text;
+    const codeBlockRegex = /```(?:html)?\s*([\s\S]*?)\s*```/;
+    const match = rawText.match(codeBlockRegex);
+
+    if (match && match[1]) {
+        return match[1].trim();
+    }
+    
+    return rawText.trim();
+};
+
+export const generateUserSimulationFromAI = async (prompt: string): Promise<UserSimulationData> => {
+    const userSimSystemInstruction = `You are a product analyst expert specializing in user behavior simulation. Based on the user's prompt, generate a plausible user journey. The response must be a JSON object that strictly adheres to the provided schema.`;
+
+    const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: `Simulate a user journey for the following goal: "${prompt}"`,
+        config: {
+            systemInstruction: userSimSystemInstruction,
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    persona: { type: Type.STRING, description: "A brief description of the user persona (e.g., 'Power User', 'New Customer')." },
+                    goal: { type: Type.STRING, description: "The primary objective of the user's journey." },
+                    journey: {
+                        type: Type.ARRAY,
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                action: { type: Type.STRING, description: "The specific action the user takes (e.g., 'Clicks Sign Up Button')." },
+                                description: { type: Type.STRING, description: "A short explanation of the user's thinking or motivation for this action." },
+                                outcome: { type: Type.STRING, description: "The result of the action: 'success', 'failure', or 'neutral'." }
+                            },
+                            required: ["action", "description", "outcome"]
+                        }
+                    },
+                    summary: { type: Type.STRING, description: "A concluding summary of the user's journey, highlighting key friction points or successes." }
+                },
+                required: ["persona", "goal", "journey", "summary"]
+            },
+        },
+    });
+
+    const jsonStr = response.text.trim();
+    try {
+        return JSON.parse(jsonStr);
+    } catch (e) {
+        console.error("Failed to parse user simulation JSON:", e);
+        throw new Error("The AI returned an invalid JSON object for the user simulation.");
+    }
 };
 
 export const synthesizeNeRFFromImages = async (files: File[]): Promise<string> => {

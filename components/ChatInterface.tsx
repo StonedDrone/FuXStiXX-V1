@@ -1,8 +1,9 @@
+
 import React, { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { GoogleGenAI, Blob, LiveServerMessage, Modality } from "@google/genai";
-import { Message, Attachment, ActiveModel, DAG, LiveStreamState } from '../types';
+import { Message, Attachment, ActiveModel, DAG, LiveStreamState, HexDumpData } from '../types';
 import { CHECK_IN_PROMPT } from '../constants';
-import { sendMessageToAI, generateImageFromAI, generateVideoFromAI, generateAudioFromAI, resetChat, transcribeAudio, generateVRSceneFromAI, editImageFromAI, synthesizeNeRFFromImages } from '../services/geminiService';
+import { sendMessageToAI, generateImageFromAI, generateVideoFromAI, generateAudioFromAI, resetChat, transcribeAudio, generateVRSceneFromAI, editImageFromAI, synthesizeNeRFFromImages, generateCreativeCodeFromAI, generateUIMockupFromAI, generateMotionFXFromAI, generateAlgorithmVisualizationFromAI, generateUserSimulationFromAI } from '../services/geminiService';
 import * as hfService from '../services/huggingFaceService';
 import * as lmStudioService from '../services/lmStudioService';
 import * as financialService from '../services/financialService';
@@ -33,6 +34,7 @@ import { PersonStandingIcon } from './icons/PersonStandingIcon';
 import { ScanIcon } from './icons/ScanIcon';
 import WorkflowStatus from './WorkflowStatus';
 import LiveStreamStatus from './LiveStreamStatus';
+import ScreenStreamView from './ScreenStreamView';
 
 // --- Audio Utility Functions ---
 function encode(bytes: Uint8Array) {
@@ -96,9 +98,10 @@ export interface ChatInterfaceHandle {
 interface ChatInterfaceProps {
     activeModel: ActiveModel;
     setActiveModel: (model: ActiveModel) => void;
+    isTfReady: boolean;
 }
 
-const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ activeModel, setActiveModel }, ref) => {
+const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ activeModel, setActiveModel, isTfReady }, ref) => {
   const initialMessage: Message = {
       id: 'init',
       text: 'FuXStiXX online. I am your co-pilot, Captain. Ready to progress the Mission. How may I assist?',
@@ -133,6 +136,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
   const [liveTranscripts, setLiveTranscripts] = useState<LiveTranscripts>({ user: '', ai: '' });
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isScanViewOpen, setIsScanViewOpen] = useState(false);
+  const [isScreenStreamOpen, setIsScreenStreamOpen] = useState(false);
   const [dags, setDags] = useState<DAG[]>([]);
   const [liveStreamState, setLiveStreamState] = useState<LiveStreamState>({ source: null, status: 'idle' });
 
@@ -477,6 +481,23 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     return { command, params };
   };
   
+  const generateHexDump = async (file: File, bytesToShow: number = 256): Promise<HexDumpData> => {
+    const buffer = await file.arrayBuffer();
+    const view = new Uint8Array(buffer.slice(0, bytesToShow));
+    let hex = '';
+    let ascii = '';
+    for (let i = 0; i < view.length; i++) {
+        if (i > 0 && i % 16 === 0) {
+            hex += '\n';
+            ascii += '\n';
+        }
+        const byte = view[i];
+        hex += byte.toString(16).padStart(2, '0').toUpperCase() + ' ';
+        ascii += (byte >= 32 && byte <= 126) ? String.fromCharCode(byte) : '.';
+    }
+    return { fileName: file.name, hex: hex.trim(), ascii: ascii.trim() };
+  };
+
   const handleSend = useCallback(async () => {
     const userMessageText = input;
     if ((!userMessageText.trim() && attachments.length === 0) || isLoading || !isOnline) return;
@@ -486,13 +507,19 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     const videoPromptPrefix = "Generate a video of: ";
     const audioPromptPrefix = "Generate music of: ";
     const vrScenePromptPrefix = "Generate a VR scene of: ";
+    const creativeCodePromptPrefix = "Generate a creative code sketch of: ";
+    const uiMockupPromptPrefix = "Generate a UI mockup for: ";
+    const motionFXPromptPrefix = "Generate a motion effect for: ";
+    const algoVisPromptPrefix = "Visualize algorithm: ";
+    const userSimPromptPrefix = "Simulate user journey for: ";
+    const devRoadmapPromptPrefix = "Generate a dev roadmap for: ";
     const realityForgePrefix = "Reality Forge";
     const transcribeAudioPrefix = "Transcribe Audio";
     const ghostCodePrefix = "Ghost Code |";
     const financialPrefixes = ["Market Pulse |", "Sector Intel |", "Crypto Scan |", "Alpha Signal |"];
-    const analysisPrefixes = ["Neural Cartography |"];
+    const analysisPrefixes = ["Neural Cartography |", "Visualize algorithm: ", "Simulate user journey for: ", "Design Deconstruction |", "Binary Scan"];
     const automationPrefixes = ["Define DAG |", "Trigger DAG |", "DAG Status", "Clear All DAGs"];
-    const streamingPrefixes = ["Live Intel Stream |", "Stop Intel Stream"];
+    const streamingPrefixes = ["Live Intel Stream |", "Stop Intel Stream", "Screen Stream"];
     const knowledgePrefixes = ["Index Source |", "Query Intel Base |", "Intel Base Status", "Purge Intel Base"];
 
     const messageAttachments: Attachment[] = attachments.map(file => ({ name: file.name, type: file.type }));
@@ -524,8 +551,8 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
       } else if (financialPrefixes.some(prefix => userMessageText.startsWith(prefix))) {
           await handleFinancialCommand(userMessageText);
       
-      } else if (analysisPrefixes.some(prefix => userMessageText.startsWith(prefix))) {
-            await handleAnalysisCommand(userMessageText);
+      } else if (analysisPrefixes.some(prefix => userMessageText.startsWith(prefix)) && !userMessageText.startsWith(devRoadmapPromptPrefix)) {
+            await handleAnalysisCommand(userMessage);
             
       } else if (automationPrefixes.some(prefix => userMessageText.startsWith(prefix))) {
             await handleAutomationCommand(userMessageText);
@@ -593,6 +620,27 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
           if (isVoiceEnabled) speakText("VR scene generation complete.");
           setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "VR scene generation complete.", media: { type: 'vr', prompt, status: 'complete', content: sceneHtml } } : m));
       
+      } else if (userMessageText.startsWith(creativeCodePromptPrefix)) {
+          const prompt = userMessageText.substring(creativeCodePromptPrefix.length);
+          setMessages(prev => [...prev, { id: aiResponseId, text: "Writing creative code...", sender: 'ai', media: { type: 'creativeCode', prompt, status: 'generating' } }]);
+          const sketchJs = await generateCreativeCodeFromAI(prompt);
+          if (isVoiceEnabled) speakText("Creative coding sketch complete.");
+          setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "Creative coding sketch complete.", media: { type: 'creativeCode', prompt, status: 'complete', content: sketchJs } } : m));
+
+      } else if (userMessageText.startsWith(uiMockupPromptPrefix)) {
+          const prompt = userMessageText.substring(uiMockupPromptPrefix.length);
+          setMessages(prev => [...prev, { id: aiResponseId, text: "Forging UI mockup...", sender: 'ai', media: { type: 'uiMockup', prompt, status: 'generating' } }]);
+          const mockupHtml = await generateUIMockupFromAI(prompt);
+          if (isVoiceEnabled) speakText("UI mockup generation complete.");
+          setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "UI mockup generation complete.", media: { type: 'uiMockup', prompt, status: 'complete', content: mockupHtml } } : m));
+
+      } else if (userMessageText.startsWith(motionFXPromptPrefix)) {
+          const prompt = userMessageText.substring(motionFXPromptPrefix.length);
+          setMessages(prev => [...prev, { id: aiResponseId, text: "Crafting motion effect...", sender: 'ai', media: { type: 'motionFx', prompt, status: 'generating' } }]);
+          const fxHtml = await generateMotionFXFromAI(prompt);
+          if (isVoiceEnabled) speakText("Motion effect generated.");
+          setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "Motion effect generated.", media: { type: 'motionFx', prompt, status: 'complete', content: fxHtml } } : m));
+
       } else if (userMessageText.startsWith(realityForgePrefix)) {
           if (attachments.length < 2) {
               throw new Error("Reality Forge requires at least 2 images from different angles, Captain.");
@@ -624,6 +672,11 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
             generationPrompt = `Generate a code snippet for the following request.\nLanguage: ${params.lang || 'javascript'}\nRequest: "${params.request}"\n\nIMPORTANT: Only output the raw code, wrapped in a markdown code block for the specified language. Do not add any explanatory text, introduction, or conclusion.`;
         }
         
+        if (userMessageText.startsWith(devRoadmapPromptPrefix)) {
+            const topic = userMessageText.substring(devRoadmapPromptPrefix.length);
+            generationPrompt = `As an expert engineering mentor, create a detailed, step-by-step learning roadmap for "${topic}". Use Markdown formatting with headings, subheadings, nested lists, and bold text for clarity. The roadmap should be practical, suggest key concepts and technologies for each step, and recommend a small project to solidify the learning.`;
+        }
+
         if (generationPrompt) parts.push({ text: generationPrompt });
         
         if (attachments.length > 0) {
@@ -791,8 +844,11 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
   const handleStreamingCommand = async (commandString: string) => {
     const { command, params } = parseCommand(commandString);
     let responseText = '';
-
-    if (command === 'Live Intel Stream') {
+    
+    if (command === 'Screen Stream') {
+        responseText = "Acknowledged. Establishing direct visual feed from your screen.";
+        setIsScreenStreamOpen(true);
+    } else if (command === 'Live Intel Stream') {
         if (!params.source) {
             responseText = "Error: Missing 'source' parameter for Live Intel Stream.";
         } else if (liveStreamState.status === 'active') {
@@ -821,13 +877,23 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
         responseText = "Unknown streaming command.";
     }
     
-    setMessages(prev => [...prev, { 
-        id: (Date.now() + 1).toString(), 
-        text: responseText, 
-        sender: 'ai', 
-    }]);
-    if (isVoiceEnabled) speakText(responseText);
+    if (responseText) {
+        setMessages(prev => [...prev, { 
+            id: (Date.now() + 1).toString(), 
+            text: responseText, 
+            sender: 'ai', 
+        }]);
+        if (isVoiceEnabled) speakText(responseText);
+    }
   };
+  
+    const handleScreenStreamClose = (reason: 'user' | 'error') => {
+        setIsScreenStreamOpen(false);
+        const text = reason === 'user'
+            ? "Screen stream terminated, Captain."
+            : "Screen stream encountered an error and was terminated.";
+        setMessages(prev => [...prev, { id: Date.now().toString(), text, sender: 'ai' }]);
+    };
 
   const handleAutomationCommand = async (commandString: string) => {
     const aiResponseId = (Date.now() + 1).toString();
@@ -874,9 +940,12 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     }
 };
 
-  const handleAnalysisCommand = async (commandString: string) => {
+  const handleAnalysisCommand = async (userMessage: Message) => {
     const aiResponseId = (Date.now() + 1).toString();
+    const commandString = userMessage.text;
     const { command, params } = parseCommand(commandString);
+    const algoVisPromptPrefix = "Visualize algorithm: ";
+    const userSimPromptPrefix = "Simulate user journey for: ";
     let loadingText: string;
 
     try {
@@ -888,7 +957,51 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
             const successText = `Neural architecture map complete for ${data.modelName}.`;
             if (isVoiceEnabled) speakText(successText);
             setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: successText, neuralArchitectureData: data } : m));
-        } else {
+        } else if (commandString.startsWith(algoVisPromptPrefix)) {
+            const prompt = commandString.substring(algoVisPromptPrefix.length);
+            setMessages(prev => [...prev, { id: aiResponseId, text: "Visualizing algorithm...", sender: 'ai', media: { type: 'algoVisualization', prompt, status: 'generating' } }]);
+            const vizHtml = await generateAlgorithmVisualizationFromAI(prompt);
+            if (isVoiceEnabled) speakText("Algorithm visualization complete.");
+            setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "Algorithm visualization complete.", media: { type: 'algoVisualization', prompt, status: 'complete', content: vizHtml } } : m));
+        } else if (commandString.startsWith(userSimPromptPrefix)) {
+            const prompt = commandString.substring(userSimPromptPrefix.length);
+            setMessages(prev => [...prev, { id: aiResponseId, text: "Simulating user journey...", sender: 'ai' }]);
+            const data = await generateUserSimulationFromAI(prompt);
+            const successText = `User journey simulation for persona '${data.persona}' is complete.`;
+            if (isVoiceEnabled) speakText(successText);
+            setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: successText, userSimulationData: data } : m));
+        } else if (command === 'Design Deconstruction') {
+            let prompt = "You are a world-class UI/UX design critic. Analyze the following and provide a detailed critique. Cover layout, color theory, typography, accessibility, and overall user experience. Use markdown for formatting.";
+            if (params.url) {
+                prompt += `\n\nAnalyze the design of this URL: ${params.url}`;
+            } else if (attachments.length === 0 || !attachments[0].type.startsWith('image/')) {
+                throw new Error("Please attach a screenshot or provide a 'url' parameter for Design Deconstruction.");
+            }
+            setMessages(prev => [...prev, { id: aiResponseId, text: 'Deconstructing design...', sender: 'ai', status: 'generating' }]);
+            const stream = await sendMessageToAI([...messages, userMessage], [{ text: prompt }]);
+            let fullResponse = '';
+            for await (const chunk of stream) {
+                fullResponse += chunk.text;
+                setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: fullResponse } : m));
+            }
+            if (isVoiceEnabled) speakText("Design deconstruction complete.");
+            setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, status: 'complete' } : m));
+        } else if (command === 'Binary Scan') {
+            if (attachments.length === 0) throw new Error("Please attach a file to use the Binary Scan power.");
+            const file = attachments[0];
+            setMessages(prev => [...prev, { id: aiResponseId, text: `Scanning binary structure of \`${file.name}\`...`, sender: 'ai', status: 'generating' }]);
+            const dumpData = await generateHexDump(file);
+            const prompt = `You are a binary analysis expert. Analyze the following hex dump from the file named '${dumpData.fileName}'. Identify any recognizable file headers (magic numbers), text strings, or structural patterns. Provide a brief summary of your findings.\n\n${dumpData.hex}`;
+            const stream = await sendMessageToAI([...messages, userMessage], [{ text: prompt }]);
+            let fullResponse = '';
+            for await (const chunk of stream) {
+                fullResponse += chunk.text;
+                setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: `Scan of \`${file.name}\` complete:\n\n${fullResponse}`, hexDumpData: dumpData } : m));
+            }
+            if (isVoiceEnabled) speakText("Binary scan complete.");
+            setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, status: 'complete' } : m));
+        }
+        else {
             throw new Error('Unknown analysis command.');
         }
     } catch (error: any) {
@@ -1146,6 +1259,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     >
       {isCameraOpen && <CameraView onClose={() => setIsCameraOpen(false)} onCapture={handleCameraCapture} />}
       {isScanViewOpen && <ObjectDetectionView onClose={() => setIsScanViewOpen(false)} onReport={handleScanReport} />}
+      {isScreenStreamOpen && <ScreenStreamView onClose={handleScreenStreamClose} />}
       
       <div className="absolute top-4 left-4 right-4 flex justify-between items-center z-10 pointer-events-none">
         <LiveStreamStatus streamState={liveStreamState} />
@@ -1238,7 +1352,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
                              <button onClick={() => isPoseDetecting ? stopPoseDetection() : startPoseDetection()} disabled={isLoading || !isOnline || isPoseSensorInitializing} className={`p-2 rounded-full transition-colors duration-200 ${isPoseDetecting ? 'text-primary animate-pulse' : 'text-secondary'} disabled:text-layer-3 disabled:cursor-not-allowed hover:text-primary`} aria-label="Toggle Kinetic Sensor" title="Toggle Kinetic Sensor">
                                 <PersonStandingIcon />
                             </button>
-                             <button onClick={() => setIsScanViewOpen(true)} disabled={isLoading || !isOnline} className="p-2 rounded-full text-secondary disabled:text-layer-3 disabled:cursor-not-allowed hover:text-primary transition-colors duration-200" aria-label="Environmental Scanner" title="Environmental Scanner">
+                             <button onClick={() => setIsScanViewOpen(true)} disabled={isLoading || !isOnline || !isTfReady} className="p-2 rounded-full text-secondary disabled:text-layer-3 disabled:cursor-not-allowed hover:text-primary transition-colors duration-200" aria-label="Environmental Scanner" title={!isTfReady ? "Initializing environmental sensors..." : "Environmental Scanner"}>
                                 <ScanIcon />
                             </button>
                             <button onClick={() => setIsVoiceEnabled(prev => !prev)} className={`p-2 rounded-full transition-colors duration-200 ${isVoiceEnabled ? 'text-primary' : 'text-secondary'} disabled:text-layer-3 disabled:cursor-not-allowed hover:text-primary`} aria-label="Toggle Voice Output" title="Toggle Voice Output">
@@ -1259,7 +1373,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
             {isPowersOpen && <div ref={powersDropdownRef}><PowersDropdown onPowerClick={handlePowerClick} onClose={() => setIsPowersOpen(false)} /></div>}
         </div>
       </div>
-       <input type="file" ref={fileInputRef} onChange={handleFileSelect} multiple className="hidden" accept="image/*,video/*,audio/*,application/zip,application/x-zip-compressed,multipart/x-zip,.md,.txt,.py,.js,.ts,.html,.css,.json" />
+       <input type="file" ref={fileInputRef} onChange={handleFileSelect} multiple className="hidden" accept="*" />
     </div>
   );
 });

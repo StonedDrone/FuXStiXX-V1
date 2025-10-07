@@ -27,6 +27,9 @@ export const CREATIVE_POWERS = [
     { name: "Sonic Synthesis", emoji: "🎵", color: "#1DB954", font: "font-sans", description: "Generates a musical track from a text prompt.", prompt: "Generate music of: " },
     { name: "Transcribe Audio", emoji: "🔊", color: "#1DB954", font: "font-sans", description: "Performs speech-to-text transcription on an attached audio file.", prompt: "Transcribe Audio" },
     { name: "VR Scene Forge", emoji: "🕶️", color: "#00FFFF", font: "font-sans", description: "Generates an interactive 3D VR scene from a text prompt.", prompt: "Generate a VR scene of: " },
+    { name: "UI Forge", emoji: "✨", color: "#4B0082", font: "font-sans", description: "Generates a UI mockup (HTML/CSS) from a text prompt.", prompt: "Generate a UI mockup for: " },
+    { name: "Code Canvas", emoji: "✨", color: "#FF69B4", font: "font-mono", description: "Generates a p5.js creative coding sketch from a text prompt.", prompt: "Generate a creative code sketch of: " },
+    { name: "Motion FX", emoji: "🎇", color: "#FF69B4", font: "font-sans", description: "Generates a motion graphics effect using mojs from a text prompt.", prompt: "Generate a motion effect for: " },
 ];
 
 export const HUGGING_FACE_POWERS = [
@@ -46,6 +49,11 @@ export const FINANCIAL_POWERS = [
 export const ANALYTICS_POWERS = [
     { name: "Alpha Signal", emoji: "💹", color: "#66FFB2", font: "font-mono", description: "Perform a quantitative analysis on a stock, providing insights like Alpha, Beta, Sharpe Ratio.", prompt: "Alpha Signal | ticker: [e.g., MSFT]" },
     { name: "Neural Cartography", emoji: "🧠", color: "#9400D3", font: "font-mono", description: "Visualize the architecture of a machine learning model from a given URL or file.", prompt: "Neural Cartography | model: [HF model ID]" },
+    { name: "Visualize Algorithm", emoji: "🔢", color: "#FFA500", font: "font-mono", description: "Generates an animated visualization for a specified algorithm.", prompt: "Visualize algorithm: " },
+    { name: "User Simulation", emoji: "👥", color: "#00BFFF", font: "font-mono", description: "Simulates a user journey based on a specified persona and goal.", prompt: "Simulate user journey for: " },
+    { name: "Dev Roadmap", emoji: "🗺️", color: "#FFD700", font: "font-mono", description: "Generates a learning roadmap for a specified technology or concept.", prompt: "Generate a dev roadmap for: " },
+    { name: "Design Deconstruction", emoji: "🎨", color: "#8A2BE2", font: "font-sans", description: "Analyzes a UI screenshot or URL for design feedback.", prompt: "Design Deconstruction | url: [optional_url]" },
+    { name: "Binary Scan", emoji: "🧬", color: "#FFD700", font: "font-mono", description: "Performs a hex-level analysis of an attached file.", prompt: "Binary Scan" },
 ];
 
 export const AUTOMATION_POWERS = [
@@ -58,6 +66,7 @@ export const AUTOMATION_POWERS = [
 export const STREAMING_POWERS = [
     { name: "Live Intel Stream", emoji: "📡", color: "#66FFB2", font: "font-mono", description: "Establishes a real-time data stream from a source for live analysis.", prompt: "Live Intel Stream | source: [e.g., system.log]" },
     { name: "Stop Intel Stream", emoji: "🛑", color: "#FF4500", font: "font-mono", description: "Terminates the active intel stream.", prompt: "Stop Intel Stream" },
+    { name: "Screen Stream", emoji: "🖥️", color: "#66FFB2", font: "font-mono", description: "Allows FuXStiXX to observe your screen in real-time.", prompt: "Screen Stream" },
 ];
 
 export const INTEL_OPS_POWERS = [

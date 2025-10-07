@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import Header from './components/Header';
 import ChatInterface, { ChatInterfaceHandle } from './components/ChatInterface';
 import Codex from './components/Codex';
@@ -8,14 +8,38 @@ import Settings from './components/Settings';
 import { UIStateProvider, useUIState } from './contexts/UIStateContext';
 import { ActiveModel } from './types';
 
+// Since tf is loaded from a script tag in index.html, we declare it as a global
+declare const tf: any;
+
 const ThemedApp: React.FC = () => {
   const [isCodexOpen, setIsCodexOpen] = useState(false);
   const [isPlaylistOpen, setIsPlaylistOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [activeModel, setActiveModel] = useState<ActiveModel>({ type: 'gemini', modelId: 'gemini-2.5-flash' });
+  const [isTfReady, setIsTfReady] = useState(false);
   
   const { theme } = useUIState();
   const chatInterfaceRef = useRef<ChatInterfaceHandle>(null);
+
+  useEffect(() => {
+    // This effect runs once on mount to initialize the TensorFlow.js backend.
+    // This resolves the "backend not initialized" warning and ensures AI vision
+    // features are ready to go without delay when activated.
+    const initializeTfBackend = async () => {
+      try {
+        if (typeof tf !== 'undefined' && tf.ready) {
+          await tf.ready();
+          console.log('TensorFlow.js backend initialized successfully.');
+          setIsTfReady(true);
+        } else {
+          console.error("TensorFlow.js global object not found. It might not have loaded correctly.");
+        }
+      } catch (error) {
+        console.error("Error initializing TensorFlow.js backend:", error);
+      }
+    };
+    initializeTfBackend();
+  }, []);
 
   const handleCodexToggle = useCallback(() => setIsCodexOpen(prev => !prev), []);
   const handlePlaylistToggle = useCallback(() => setIsPlaylistOpen(prev => !prev), []);
@@ -44,6 +68,7 @@ const ThemedApp: React.FC = () => {
             ref={chatInterfaceRef}
             activeModel={activeModel}
             setActiveModel={setActiveModel}
+            isTfReady={isTfReady}
           />
         </main>
       </div>

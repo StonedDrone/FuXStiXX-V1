@@ -10,8 +10,14 @@ import WorkflowDataView from './WorkflowDataView';
 import TranscriptionView from './TranscriptionView';
 import KnowledgeBaseView from './KnowledgeBaseView';
 import NeuralArchitectureView from './NeuralArchitectureView';
+import UserSimulationView from './UserSimulationView';
 import { StreamIcon } from './icons/StreamIcon';
 import VRSceneViewer from './VRSceneViewer';
+import CreativeCodeViewer from './CreativeCodeViewer';
+import UIMockupViewer from './UIMockupViewer';
+import MotionFXViewer from './MotionFXViewer';
+import AlgorithmVisualizer from './AlgorithmVisualizer';
+import HexView from './HexView';
 
 interface ChatMessageProps {
   message: Message;
@@ -103,6 +109,14 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
                                     ? "Synthesizing audio track..."
                                      : message.media.type === 'vr'
                                     ? "Forging VR scene..."
+                                    : message.media.type === 'creativeCode'
+                                    ? "Writing creative code..."
+                                    : message.media.type === 'uiMockup'
+                                    ? "Generating UI mockup..."
+                                    : message.media.type === 'motionFx'
+                                    ? "Crafting motion effect..."
+                                    : message.media.type === 'algoVisualization'
+                                    ? "Visualizing algorithm..."
                                     : "Generating image..."}
                             </span>
                         </div>
@@ -116,8 +130,20 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
                     {message.media.status === 'complete' && message.media.type === 'audio' && message.media.url && (
                         <audio src={message.media.url} controls className="w-full sm:max-w-sm" />
                     )}
-                    {message.media.status === 'complete' && message.media.type === 'vr' && (
+                    {message.media.status === 'complete' && message.media.type === 'vr' && message.media.content && (
                         <VRSceneViewer sceneHtml={message.media.content} />
+                    )}
+                    {message.media.status === 'complete' && message.media.type === 'creativeCode' && message.media.content && (
+                        <CreativeCodeViewer sketchJs={message.media.content} />
+                    )}
+                    {message.media.status === 'complete' && message.media.type === 'uiMockup' && message.media.content && (
+                        <UIMockupViewer htmlContent={message.media.content} />
+                    )}
+                    {message.media.status === 'complete' && message.media.type === 'motionFx' && message.media.content && (
+                        <MotionFXViewer htmlContent={message.media.content} />
+                    )}
+                    {message.media.status === 'complete' && message.media.type === 'algoVisualization' && message.media.content && (
+                        <AlgorithmVisualizer htmlContent={message.media.content} />
                     )}
                     {message.media.status === 'error' && (
                         <p className="text-sm text-danger font-mono">Generation failed, Captain.</p>
@@ -142,6 +168,12 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
         )}
         {message.neuralArchitectureData && (
             <NeuralArchitectureView data={message.neuralArchitectureData} />
+        )}
+        {message.userSimulationData && (
+            <UserSimulationView data={message.userSimulationData} />
+        )}
+        {message.hexDumpData && (
+            <HexView data={message.hexDumpData} />
         )}
       </div>
     </div>

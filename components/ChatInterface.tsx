@@ -5,6 +5,7 @@ import { CHECK_IN_PROMPT } from '../constants';
 import { sendMessageToAI, generateImageFromAI, generateVideoFromAI, generateAudioFromAI, resetChat } from '../services/geminiService';
 import * as hfService from '../services/huggingFaceService';
 import * as lmStudioService from '../services/lmStudioService';
+import * as financialService from '../services/financialService';
 import ChatMessage from './ChatMessage';
 import { SendIcon } from './icons/SendIcon';
 import { CameraIcon } from './icons/CameraIcon';
@@ -423,6 +424,19 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
         reader.onerror = error => reject(error);
     });
   };
+
+  const parseCommand = (commandString: string): { command: string, params: Record<string, string> } => {
+    const parts = commandString.split('|').map(p => p.trim());
+    const command = parts[0];
+    const params: Record<string, string> = {};
+    parts.slice(1).forEach(part => {
+        const [key, ...valueParts] = part.split(':');
+        if (key && valueParts.length > 0) {
+            params[key.trim().toLowerCase()] = valueParts.join(':').trim();
+        }
+    });
+    return { command, params };
+  };
   
   const handleSend = useCallback(async () => {
     const userMessageText = input;
@@ -431,8 +445,8 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     const imagePromptPrefix = "Generate an image of: ";
     const videoPromptPrefix = "Generate a video of: ";
     const audioPromptPrefix = "Generate music of: ";
-    const hfPrefix = "HF ";
     const ghostCodePrefix = "Ghost Code |";
+    const financialPrefixes = ["Market Pulse |", "Sector Intel |", "Crypto Scan |"];
 
     const messageAttachments: Attachment[] = attachments.map(file => ({ name: file.name, type: file.type }));
     const userMessage: Message = { id: Date.now().toString(), text: userMessageText, sender: 'user', attachments: messageAttachments };
@@ -457,18 +471,11 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
           if (isVoiceEnabled) speakText(fullResponse);
           setMessages((prev) => prev.map((msg) => msg.id === aiResponseId ? { ...msg, text: fullResponse, status: 'complete' } : msg));
 
-      } else if (activeModel.type === 'huggingface' && !userMessageText.trim().startsWith(hfPrefix)) {
-          setMessages(prev => [...prev, { id: aiResponseId, text: `Querying ${activeModel.modelId}...`, sender: 'ai', huggingFaceData: { type: 'modelQuery', query: { model: activeModel.modelId, prompt: userMessage.text }, result: null } }]);
-          const result = await hfService.queryModel(activeModel.modelId, userMessage.text);
-           if (isVoiceEnabled) speakText("Response received from Hugging Face model.");
-          setMessages(prev => prev.map(m => m.id === aiResponseId ? {
-              ...m,
-              text: 'Hugging Face operation complete, Captain.',
-              huggingFaceData: { type: 'modelQuery', query: { model: activeModel.modelId, prompt: userMessage.text }, result }
-          } : m));
-
-      } else if (userMessageText.startsWith(hfPrefix)) {
+      } else if (userMessageText.startsWith("HF ")) {
           await handleHuggingFaceCommand(userMessageText);
+
+      } else if (financialPrefixes.some(prefix => userMessageText.startsWith(prefix))) {
+          await handleFinancialCommand(userMessageText);
 
       } else if (userMessageText.startsWith(imagePromptPrefix)) {
           const content = userMessageText.substring(imagePromptPrefix.length);
@@ -514,12 +521,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
         }
 
         if (userMessageText.trim().startsWith(ghostCodePrefix)) {
-            const ghostParts = userMessageText.split('|').map(p => p.trim());
-            const params: Record<string, string> = {};
-            ghostParts.slice(1).forEach(part => {
-                const [key, ...valueParts] = part.split(':');
-                if (key && valueParts.length > 0) params[key.trim().toLowerCase()] = valueParts.join(':').trim();
-            });
+            const { params } = parseCommand(userMessageText);
             if (!params.request || params.request === '[description of code]') throw new Error("Missing 'request' parameter for Ghost Code.");
             generationPrompt = `Generate a code snippet for the following request.\nLanguage: ${params.lang || 'javascript'}\nRequest: "${params.request}"\n\nIMPORTANT: Only output the raw code, wrapped in a markdown code block for the specified language. Do not add any explanatory text, introduction, or conclusion.`;
         }
@@ -602,36 +604,70 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     sendAfterScanRef.current = true;
   };
 
+  const handleFinancialCommand = async (commandString: string) => {
+    const aiResponseId = (Date.now() + 1).toString();
+    const { command, params } = parseCommand(commandString);
+    let loadingText: string;
+
+    try {
+        if (command === 'Market Pulse') {
+            if (!params.ticker) throw new Error("Missing 'ticker' parameter.");
+            loadingText = `Accessing market data for ${params.ticker.toUpperCase()}, Captain...`;
+            setMessages(prev => [...prev, { id: aiResponseId, text: loadingText, sender: 'ai' }]);
+            const data = await financialService.getStockQuote(params.ticker);
+            setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "Data acquired. Here is the current pulse:", financialData: { type: 'stock', data } } : m));
+        } else if (command === 'Sector Intel') {
+            if (!params.ticker) throw new Error("Missing 'ticker' parameter.");
+            loadingText = `Retrieving sector intel for ${params.ticker.toUpperCase()}...`;
+            setMessages(prev => [...prev, { id: aiResponseId, text: loadingText, sender: 'ai' }]);
+            const data = await financialService.getStockNews(params.ticker);
+            setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "Latest headlines on your target:", financialData: { type: 'news', data } } : m));
+        } else if (command === 'Crypto Scan') {
+            if (!params.symbol) throw new Error("Missing 'symbol' parameter.");
+            loadingText = `Scanning crypto markets for ${params.symbol.toUpperCase()}...`;
+            setMessages(prev => [...prev, { id: aiResponseId, text: loadingText, sender: 'ai' }]);
+            const data = await financialService.getCryptoPrice(params.symbol);
+            setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "Crypto asset data acquired:", financialData: { type: 'crypto', data } } : m));
+        } else {
+            throw new Error('Unknown financial command.');
+        }
+
+    } catch (error: any) {
+        console.error('Financial command failed:', error);
+        const failureText = `Financial data request failed, Captain: ${error.message}`;
+        if (isVoiceEnabled) speakText(failureText);
+        setMessages(prev => {
+            const existingMsg = prev.find(m => m.id === aiResponseId);
+            if (existingMsg) {
+                return prev.map(m => m.id === aiResponseId ? { ...m, status: 'error' as const, text: failureText } : m);
+            }
+            return [...prev, { id: aiResponseId, sender: 'ai', status: 'error' as const, text: failureText }];
+        });
+    }
+};
+
   const handleHuggingFaceCommand = async (commandString: string) => {
     const aiResponseId = (Date.now() + 1).toString();
     let type: any, query: Record<string, any> = {}, loadingText: string;
 
     try {
-        const parts = commandString.split('|').map(p => p.trim());
-        const commandPart = parts[0];
-        const params: Record<string, string> = {};
-        parts.slice(1).forEach(part => {
-            const [key, ...valueParts] = part.split(':');
-            if (key && valueParts.length > 0) {
-                params[key.trim()] = valueParts.join(':').trim();
-            }
-        });
+        const { command, params } = parseCommand(commandString.substring(3)); // remove "HF "
 
-        if (commandPart === 'HF LLM Search') {
+        if (command === 'LLM Search') {
             type = 'modelSearch';
             if (!params.query) throw new Error("Missing 'query' parameter for LLM Search.");
             query = { query: params.query };
             loadingText = `Searching for models matching: \`${params.query}\`...`;
-        } else if (commandPart === 'HF Model Query') {
+        } else if (command === 'Model Query') {
             type = 'modelQuery';
             if (!params.model || !params.prompt) throw new Error("Missing 'model' or 'prompt' parameter for Model Query.");
             query = { model: params.model, prompt: params.prompt };
             loadingText = `Querying model: \`${params.model}\`...`;
-        } else if (commandPart === 'HF Space Explorer' || commandPart === 'HF Cache Space') {
+        } else if (command === 'Space Explorer' || command === 'Cache Space') {
             type = 'spaceInfo';
-            if (!params.space) throw new Error(`Missing 'space' parameter for ${commandPart}.`);
+            if (!params.space) throw new Error(`Missing 'space' parameter for ${command}.`);
             query = { space: params.space };
-            loadingText = commandPart === 'HF Space Explorer' 
+            loadingText = command === 'Space Explorer' 
                 ? `Exploring Space: \`${params.space}\`...` 
                 : `Attempting to cache intel for Space: \`${params.space}\`...`;
         } else {
@@ -646,18 +682,18 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
         }]);
 
         let result: any;
-        if (commandPart === 'HF LLM Search') {
+        if (command === 'LLM Search') {
             result = await hfService.searchModels(params.query);
-        } else if (commandPart === 'HF Model Query') {
+        } else if (command === 'Model Query') {
             result = await hfService.queryModel(params.model, params.prompt);
             setActiveModel({ type: 'huggingface', modelId: params.model });
-        } else if (commandPart === 'HF Space Explorer') {
+        } else if (command === 'Space Explorer') {
             result = await hfService.getSpaceInfo(params.space, false);
-        } else if (commandPart === 'HF Cache Space') {
+        } else if (command === 'Cache Space') {
             result = await hfService.getSpaceInfo(params.space, true);
         }
 
-        const successText = commandPart === 'HF Cache Space'
+        const successText = command === 'Cache Space'
             ? `Intel for \`${params.space}\` has been successfully cached for offline use.`
             : `Hugging Face operation complete, Captain.`;
         

@@ -5,6 +5,7 @@ import { UserIcon } from './icons/UserIcon';
 import { AttachmentIcon } from './icons/AttachmentIcons';
 import { LoaderIcon } from './icons/LoaderIcon';
 import HuggingFaceResult from './HuggingFaceResult';
+import FinancialDataView from './FinancialDataView';
 
 interface ChatMessageProps {
   message: Message;
@@ -44,7 +45,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
         ? 'bg-layer-1' 
         : 'bg-accent text-black'
       }`}>
-        {message.status === 'generating' && !message.text && !message.media && !message.huggingFaceData && (
+        {message.status === 'generating' && !message.text && !message.media && !message.huggingFaceData && !message.financialData && (
           <div className="flex items-center space-x-2 text-secondary animate-pulse">
               <LoaderIcon />
               <span className="text-sm">Thinking...</span>
@@ -109,6 +110,9 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
         )}
         {message.huggingFaceData && (
             <HuggingFaceResult data={message.huggingFaceData} />
+        )}
+        {message.financialData && (
+            <FinancialDataView data={message.financialData} />
         )}
       </div>
     </div>

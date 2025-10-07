@@ -15,6 +15,39 @@ export interface HuggingFaceResult {
     error?: string;
 }
 
+export type FinancialDataType = 'stock' | 'news' | 'crypto';
+
+export interface StockQuote {
+    ticker: string;
+    name: string;
+    price: string;
+    change: string;
+    changePercent: string;
+    volume: string;
+    isPositive: boolean;
+}
+
+export interface NewsArticle {
+    headline: string;
+    source: string;
+    url: string;
+    timestamp: string;
+}
+
+export interface CryptoPrice {
+    symbol: string;
+    name: string;
+    price: string;
+    change24h: string;
+    isPositive: boolean;
+}
+
+export interface FinancialData {
+    type: FinancialDataType;
+    data: StockQuote | NewsArticle[] | CryptoPrice;
+}
+
+
 export interface Message {
   id: string;
   text: string;
@@ -28,6 +61,7 @@ export interface Message {
     status?: 'generating' | 'complete' | 'error';
   };
   huggingFaceData?: HuggingFaceResult;
+  financialData?: FinancialData;
 }
 
 export interface Track {

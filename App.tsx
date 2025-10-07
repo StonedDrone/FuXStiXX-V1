@@ -1,6 +1,7 @@
+
 import React, { useState, useCallback, useRef } from 'react';
 import Header from './components/Header';
-import ChatInterface from './components/ChatInterface';
+import ChatInterface, { ChatInterfaceHandle } from './components/ChatInterface';
 import Codex from './components/Codex';
 import Playlist from './components/Playlist';
 import Settings from './components/Settings';
@@ -14,58 +15,56 @@ const ThemedApp: React.FC = () => {
   const [activeModel, setActiveModel] = useState<ActiveModel>({ type: 'gemini', modelId: 'gemini-2.5-flash' });
   
   const { theme } = useUIState();
-  const chatInterfaceRef = useRef<{ clearChat: () => void }>(null);
+  const chatInterfaceRef = useRef<ChatInterfaceHandle>(null);
 
-  const handleClearChat = () => {
-    if (window.confirm("Are you sure you want to clear the entire conversation history, Captain? This action cannot be undone.")) {
-      chatInterfaceRef.current?.clearChat();
-      setActiveModel({ type: 'gemini', modelId: 'gemini-2.5-flash' });
-    }
-  };
+  const handleCodexToggle = useCallback(() => setIsCodexOpen(prev => !prev), []);
+  const handlePlaylistToggle = useCallback(() => setIsPlaylistOpen(prev => !prev), []);
+  const handleSettingsToggle = useCallback(() => setIsSettingsOpen(prev => !prev), []);
 
-  const handleActivateLMStudio = (details: { modelId: string; baseURL: string }) => {
-    setActiveModel({
-        type: 'lmstudio',
-        modelId: details.modelId,
-        baseURL: details.baseURL
-    });
+  const handleClearChat = useCallback(() => {
+    chatInterfaceRef.current?.clearChat();
+  }, []);
+
+  const handleActivateLMStudio = useCallback(({ baseURL, modelId }: { baseURL: string, modelId: string }) => {
+    setActiveModel({ type: 'lmstudio', modelId, baseURL });
     setIsSettingsOpen(false);
-  };
+  }, []);
 
   return (
-    <div 
-      className="relative flex h-full w-full font-sans bg-base text-secondary overflow-hidden rounded-md transition-colors duration-500"
-      data-theme={theme}
-    >
-      <Codex isOpen={isCodexOpen} onClose={() => setIsCodexOpen(false)} />
-      <Playlist isOpen={isPlaylistOpen} onClose={() => setIsPlaylistOpen(false)} />
-      <Settings isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} onActivate={handleActivateLMStudio} />
-      <div className="flex flex-col flex-1">
-        <Header 
-          onCodexToggle={() => setIsCodexOpen(prev => !prev)} 
-          onPlaylistToggle={() => setIsPlaylistOpen(prev => !prev)}
-          onSettingsToggle={() => setIsSettingsOpen(prev => !prev)}
-          onClearChat={handleClearChat}
-        />
-        <main className="flex-1 overflow-y-auto">
+    <div id="app-container" className={`theme-${theme} h-screen w-screen bg-base text-secondary flex flex-col font-sans antialiased overflow-hidden`}>
+      <Header
+        onCodexToggle={handleCodexToggle}
+        onPlaylistToggle={handlePlaylistToggle}
+        onSettingsToggle={handleSettingsToggle}
+        onClearChat={handleClearChat}
+      />
+      <div className="flex-1 flex overflow-hidden">
+        <main className="flex-1 flex flex-col">
           <ChatInterface 
-            ref={chatInterfaceRef} 
+            ref={chatInterfaceRef}
             activeModel={activeModel}
             setActiveModel={setActiveModel}
           />
         </main>
       </div>
+
+      <Codex isOpen={isCodexOpen} onClose={handleCodexToggle} />
+      <Playlist isOpen={isPlaylistOpen} onClose={handlePlaylistToggle} />
+      <Settings 
+        isOpen={isSettingsOpen} 
+        onClose={handleSettingsToggle} 
+        onActivate={handleActivateLMStudio} 
+      />
     </div>
   );
 };
 
-
 const App: React.FC = () => {
-  return (
-    <UIStateProvider>
-      <ThemedApp />
-    </UIStateProvider>
-  );
+    return (
+        <UIStateProvider>
+            <ThemedApp />
+        </UIStateProvider>
+    );
 };
 
 export default App;

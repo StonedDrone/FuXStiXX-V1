@@ -1,6 +1,7 @@
 import React from 'react';
 
-export const LoaderIcon: React.FC = () => (
+// FIX: Added className prop to allow for custom styling from parent components.
+export const LoaderIcon: React.FC<{ className?: string }> = ({ className }) => (
     <svg 
         xmlns="http://www.w3.org/2000/svg" 
         width="20" 
@@ -11,7 +12,7 @@ export const LoaderIcon: React.FC = () => (
         strokeWidth="2" 
         strokeLinecap="round" 
         strokeLinejoin="round"
-        className="animate-spin"
+        className={`animate-spin ${className || ''}`.trim()}
     >
         <line x1="12" y1="2" x2="12" y2="6"></line>
         <line x1="12" y1="18" x2="12" y2="22"></line>

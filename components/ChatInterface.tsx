@@ -1,12 +1,14 @@
 import React, { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { GoogleGenAI, Blob, LiveServerMessage, Modality } from "@google/genai";
-import { Message, Attachment, ActiveModel, DAG } from '../types';
+import { Message, Attachment, ActiveModel, DAG, LiveStreamState } from '../types';
 import { CHECK_IN_PROMPT } from '../constants';
-import { sendMessageToAI, generateImageFromAI, generateVideoFromAI, generateAudioFromAI, resetChat } from '../services/geminiService';
+import { sendMessageToAI, generateImageFromAI, generateVideoFromAI, generateAudioFromAI, resetChat, transcribeAudio, generateVRSceneFromAI } from '../services/geminiService';
 import * as hfService from '../services/huggingFaceService';
 import * as lmStudioService from '../services/lmStudioService';
 import * as financialService from '../services/financialService';
 import * as workflowService from '../services/workflowService';
+import * as streamingService from '../services/streamingService';
+import * as knowledgeService from '../services/knowledgeService';
 import ChatMessage from './ChatMessage';
 import { SendIcon } from './icons/SendIcon';
 import { CameraIcon } from './icons/CameraIcon';
@@ -29,6 +31,7 @@ import { FaceSmileIcon } from './icons/FaceSmileIcon';
 import { PersonStandingIcon } from './icons/PersonStandingIcon';
 import { ScanIcon } from './icons/ScanIcon';
 import WorkflowStatus from './WorkflowStatus';
+import LiveStreamStatus from './LiveStreamStatus';
 
 // --- Audio Utility Functions ---
 function encode(bytes: Uint8Array) {
@@ -130,6 +133,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isScanViewOpen, setIsScanViewOpen] = useState(false);
   const [dags, setDags] = useState<DAG[]>([]);
+  const [liveStreamState, setLiveStreamState] = useState<LiveStreamState>({ source: null, status: 'idle' });
 
   const { setTheme } = useUIState();
   const { 
@@ -236,6 +240,8 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
         if (liveStatus !== 'idle') {
             stopLiveConversation();
         }
+        // Ensure intel stream is stopped on unmount
+        streamingService.stop();
     };
   }, []);
   
@@ -448,6 +454,15 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     });
   };
 
+   const fileToText = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsText(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
   const parseCommand = (commandString: string): { command: string, params: Record<string, string> } => {
     const parts = commandString.split('|').map(p => p.trim());
     const command = parts[0];
@@ -468,9 +483,13 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     const imagePromptPrefix = "Generate an image of: ";
     const videoPromptPrefix = "Generate a video of: ";
     const audioPromptPrefix = "Generate music of: ";
+    const vrScenePromptPrefix = "Generate a VR scene of: ";
+    const transcribeAudioPrefix = "Transcribe Audio";
     const ghostCodePrefix = "Ghost Code |";
     const financialPrefixes = ["Market Pulse |", "Sector Intel |", "Crypto Scan |"];
     const automationPrefixes = ["Define DAG |", "Trigger DAG |", "DAG Status", "Clear All DAGs"];
+    const streamingPrefixes = ["Live Intel Stream |", "Stop Intel Stream"];
+    const knowledgePrefixes = ["Index Source |", "Query Intel Base |", "Intel Base Status", "Purge Intel Base"];
 
     const messageAttachments: Attachment[] = attachments.map(file => ({ name: file.name, type: file.type }));
     const userMessage: Message = { id: Date.now().toString(), text: userMessageText, sender: 'user', attachments: messageAttachments };
@@ -504,6 +523,22 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
       } else if (automationPrefixes.some(prefix => userMessageText.startsWith(prefix))) {
             await handleAutomationCommand(userMessageText);
 
+      } else if (streamingPrefixes.some(prefix => userMessageText.startsWith(prefix))) {
+            await handleStreamingCommand(userMessageText);
+      
+      } else if (knowledgePrefixes.some(prefix => userMessageText.startsWith(prefix))) {
+            await handleKnowledgeCommand(userMessage);
+
+      } else if (userMessageText.startsWith(transcribeAudioPrefix)) {
+          if (attachments.length === 0 || !attachments[0].type.startsWith('audio/')) {
+              throw new Error("Please attach an audio file to use the Transcribe Audio power.");
+          }
+          const audioFile = attachments[0];
+          setMessages(prev => [...prev, { id: aiResponseId, text: `Processing audio signal from \`${audioFile.name}\`...`, sender: 'ai' }]);
+          const transcription = await transcribeAudio(audioFile);
+          if (isVoiceEnabled) speakText("Transcription complete.");
+          setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "Transcription complete, Captain.", transcriptionData: { fileName: audioFile.name, transcription } } : m));
+
       } else if (userMessageText.startsWith(imagePromptPrefix)) {
           const content = userMessageText.substring(imagePromptPrefix.length);
           const parts = content.split('|').map(p => p.trim());
@@ -512,24 +547,31 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
           if (parts.length > 1 && parts[1].toLowerCase().startsWith('aspectratio:')) {
               aspectRatio = parts[1].substring('aspectratio:'.length).trim();
           }
-          setMessages(prev => [...prev, { id: aiResponseId, text: "Forging image...", sender: 'ai', media: { type: 'image', prompt: content, status: 'generating', url: '' } }]);
+          setMessages(prev => [...prev, { id: aiResponseId, text: "Forging image...", sender: 'ai', media: { type: 'image', prompt: content, status: 'generating' } }]);
           const imageUrl = await generateImageFromAI(prompt, aspectRatio);
           if (isVoiceEnabled) speakText("Image generation complete.");
           setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "Image generation complete.", media: { type: 'image', prompt: content, status: 'complete', url: imageUrl } } : m));
 
       } else if (userMessageText.startsWith(videoPromptPrefix)) {
           const prompt = userMessageText.substring(videoPromptPrefix.length);
-          setMessages(prev => [...prev, { id: aiResponseId, text: "Synthesizing video...", sender: 'ai', media: { type: 'video', prompt, status: 'generating', url: '' } }]);
+          setMessages(prev => [...prev, { id: aiResponseId, text: "Synthesizing video...", sender: 'ai', media: { type: 'video', prompt, status: 'generating' } }]);
           const videoUrl = await generateVideoFromAI(prompt);
           if (isVoiceEnabled) speakText("Video synthesis complete.");
           setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "Video synthesis complete.", media: { type: 'video', prompt, status: 'complete', url: videoUrl } } : m));
 
       } else if (userMessageText.startsWith(audioPromptPrefix)) {
           const prompt = userMessageText.substring(audioPromptPrefix.length);
-          setMessages(prev => [...prev, { id: aiResponseId, text: "Synthesizing audio...", sender: 'ai', media: { type: 'audio', prompt, status: 'generating', url: '' } }]);
+          setMessages(prev => [...prev, { id: aiResponseId, text: "Synthesizing audio...", sender: 'ai', media: { type: 'audio', prompt, status: 'generating' } }]);
           const audioUrl = await generateAudioFromAI(prompt);
           if (isVoiceEnabled) speakText("Sonic synthesis complete.");
           setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "Sonic synthesis complete.", media: { type: 'audio', prompt, status: 'complete', url: audioUrl } } : m));
+      
+      } else if (userMessageText.startsWith(vrScenePromptPrefix)) {
+          const prompt = userMessageText.substring(vrScenePromptPrefix.length);
+          setMessages(prev => [...prev, { id: aiResponseId, text: "Forging VR scene...", sender: 'ai', media: { type: 'vr', prompt, status: 'generating' } }]);
+          const sceneHtml = await generateVRSceneFromAI(prompt);
+          if (isVoiceEnabled) speakText("VR scene generation complete.");
+          setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: "VR scene generation complete.", media: { type: 'vr', prompt, status: 'complete', content: sceneHtml } } : m));
       
       } else {
         const parts: any[] = [];
@@ -629,6 +671,133 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     setInput(`I've completed an environmental scan. Objects detected: ${objectList}. Provide a tactical analysis.`);
     setIsScanViewOpen(false);
     sendAfterScanRef.current = true;
+  };
+
+  const handleKnowledgeCommand = async (userMessage: Message) => {
+    const aiResponseId = (Date.now() + 1).toString();
+    const commandString = userMessage.text;
+    const { command, params } = parseCommand(commandString);
+
+    try {
+        if (command === 'Index Source') {
+            let sourceName: string;
+            let content: string;
+            let sourceType: 'url' | 'file';
+
+            if (params.url) {
+                sourceName = params.url;
+                sourceType = 'url';
+                setMessages(prev => [...prev, { id: aiResponseId, text: `Acknowledged. Processing and indexing \`${sourceName}\`... This may take a moment.`, sender: 'ai' }]);
+                content = `Simulated content from ${sourceName}. Haystack is a framework for building search systems. It allows you to use transformer models.`; // In a real app, you'd fetch this URL.
+            } else if (attachments.length > 0) {
+                const file = attachments[0];
+                sourceName = file.name;
+                sourceType = 'file';
+                setMessages(prev => [...prev, { id: aiResponseId, text: `Acknowledged. Processing and indexing \`${sourceName}\`...`, sender: 'ai' }]);
+                content = await fileToText(file);
+            } else {
+                throw new Error("Missing source. Provide a 'url' parameter or attach a file.");
+            }
+
+            await knowledgeService.addDocument(sourceName, sourceType, content);
+            const successText = `Source '${sourceName}' has been successfully indexed into the intel base.`;
+            setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: successText } : m));
+            if (isVoiceEnabled) speakText(successText);
+
+        } else if (command === 'Query Intel Base') {
+            if (!params.question) throw new Error("Missing 'question' parameter.");
+            const question = params.question;
+            setMessages(prev => [...prev, { id: aiResponseId, text: `Querying the intel base for: "${question}"...`, sender: 'ai', status: 'generating' }]);
+            
+            const { context, sources } = await knowledgeService.retrieve(question);
+            
+            if (!context) {
+                const noResultText = `No relevant information found in the intel base for your query, Captain.`;
+                setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: noResultText, status: 'complete' } : m));
+                if (isVoiceEnabled) speakText(noResultText);
+                return;
+            }
+
+            const ragPrompt = `Based *only* on the following context, answer the user's question. If the context doesn't contain the answer, say so. Mention the sources used.\n\nContext:\n---\n${context}\n---\nSources: ${sources.join(', ')}\n\nQuestion: ${question}`;
+            
+            const stream = await sendMessageToAI([...messages, userMessage], [{ text: ragPrompt }]);
+            let fullResponse = '';
+            for await (const chunk of stream) {
+                fullResponse += chunk.text;
+                setMessages((prev) => prev.map((msg) => msg.id === aiResponseId ? { ...msg, text: fullResponse } : msg));
+            }
+            if (isVoiceEnabled) speakText(fullResponse);
+            setMessages((prev) => prev.map((msg) => msg.id === aiResponseId ? { ...msg, status: 'complete' } : msg));
+            
+        } else if (command === 'Intel Base Status') {
+            const documents = knowledgeService.getDocuments();
+            const responseText = "Captain, here is the current manifest of the intel base.";
+            setMessages(prev => [...prev, { id: aiResponseId, text: responseText, sender: 'ai', knowledgeBaseData: { documents } }]);
+            if (isVoiceEnabled) speakText(responseText);
+
+        } else if (command === 'Purge Intel Base') {
+            knowledgeService.purge();
+            const responseText = "Confirmed. All indexed knowledge has been purged from my long-term memory. The intel base is now empty.";
+            setMessages(prev => [...prev, { id: aiResponseId, text: responseText, sender: 'ai' }]);
+            if (isVoiceEnabled) speakText(responseText);
+
+        } else {
+            throw new Error('Unknown Intel Ops command.');
+        }
+
+    } catch (error: any) {
+        console.error('Knowledge command failed:', error);
+        const failureText = `Intel Ops command failed, Captain: ${error.message}`;
+        if (isVoiceEnabled) speakText(failureText);
+        setMessages(prev => {
+            const existingMsg = prev.find(m => m.id === aiResponseId);
+            if (existingMsg) {
+                return prev.map(m => m.id === aiResponseId ? { ...m, status: 'error' as const, text: failureText } : m);
+            }
+            return [...prev, { id: aiResponseId, sender: 'ai', status: 'error' as const, text: failureText }];
+        });
+    }
+};
+
+  const handleStreamingCommand = async (commandString: string) => {
+    const { command, params } = parseCommand(commandString);
+    let responseText = '';
+
+    if (command === 'Live Intel Stream') {
+        if (!params.source) {
+            responseText = "Error: Missing 'source' parameter for Live Intel Stream.";
+        } else if (liveStreamState.status === 'active') {
+            responseText = `Error: An intel stream from '${liveStreamState.source}' is already active.`;
+        } else {
+            responseText = `Tapping into the data stream for '${params.source}', Captain. I will report any significant events in real-time.`;
+            setLiveStreamState({ source: params.source, status: 'active' });
+            streamingService.start(params.source, (newMessage) => {
+                setMessages(prev => [...prev, {
+                    id: Date.now().toString(),
+                    text: newMessage,
+                    sender: 'ai',
+                    isLiveStream: true,
+                }]);
+            });
+        }
+    } else if (command === 'Stop Intel Stream') {
+        if (liveStreamState.status !== 'active') {
+            responseText = "No active intel stream to stop, Captain.";
+        } else {
+            responseText = `Acknowledged. Terminating the live feed from '${liveStreamState.source}'. Standing by.`;
+            streamingService.stop();
+            setLiveStreamState({ source: null, status: 'idle' });
+        }
+    } else {
+        responseText = "Unknown streaming command.";
+    }
+    
+    setMessages(prev => [...prev, { 
+        id: (Date.now() + 1).toString(), 
+        text: responseText, 
+        sender: 'ai', 
+    }]);
+    if (isVoiceEnabled) speakText(responseText);
   };
 
   const handleAutomationCommand = async (commandString: string) => {
@@ -906,9 +1075,12 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
       {isCameraOpen && <CameraView onClose={() => setIsCameraOpen(false)} onCapture={handleCameraCapture} />}
       {isScanViewOpen && <ObjectDetectionView onClose={() => setIsScanViewOpen(false)} onReport={handleScanReport} />}
       
-      <WorkflowStatus dags={dags} />
-      
-      <div className="flex-1 overflow-y-auto pr-2">
+      <div className="absolute top-4 left-4 right-4 flex justify-between items-center z-10 pointer-events-none">
+        <LiveStreamStatus streamState={liveStreamState} />
+        <WorkflowStatus dags={dags} />
+      </div>
+
+      <div className="flex-1 overflow-y-auto pr-2 pt-12">
         <div className="space-y-6">
           {messages.map((msg) => <ChatMessage key={msg.id} message={msg} />)}
         </div>
@@ -1015,7 +1187,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
             {isPowersOpen && <div ref={powersDropdownRef}><PowersDropdown onPowerClick={handlePowerClick} onClose={() => setIsPowersOpen(false)} /></div>}
         </div>
       </div>
-       <input type="file" ref={fileInputRef} onChange={handleFileSelect} multiple className="hidden" accept="image/*,video/*,application/zip,application/x-zip-compressed,multipart/x-zip,.md,.txt,.py,.js,.ts,.html,.css,.json" />
+       <input type="file" ref={fileInputRef} onChange={handleFileSelect} multiple className="hidden" accept="image/*,video/*,audio/*,application/zip,application/x-zip-compressed,multipart/x-zip,.md,.txt,.py,.js,.ts,.html,.css,.json" />
     </div>
   );
 });

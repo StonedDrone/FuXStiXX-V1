@@ -25,7 +25,7 @@ const WorkflowStatus: React.FC<WorkflowStatusProps> = ({ dags }) => {
   }, 0);
 
   return (
-    <div className="absolute top-4 right-44 flex items-center space-x-4 bg-layer-1/80 backdrop-blur-sm border border-layer-3 rounded-full px-4 py-1.5 text-xs font-mono shadow-lg z-10">
+    <div className="flex items-center space-x-4 bg-layer-1/80 backdrop-blur-sm border border-layer-3 rounded-full px-4 py-1.5 text-xs font-mono shadow-lg pointer-events-auto">
       <div className="flex items-center space-x-2 text-secondary" title="Total Defined DAGs">
         <WorkflowIcon />
         <span>{dags.length} DAGs</span>

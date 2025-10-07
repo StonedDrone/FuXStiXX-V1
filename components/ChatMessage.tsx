@@ -7,6 +7,10 @@ import { LoaderIcon } from './icons/LoaderIcon';
 import HuggingFaceResult from './HuggingFaceResult';
 import FinancialDataView from './FinancialDataView';
 import WorkflowDataView from './WorkflowDataView';
+import TranscriptionView from './TranscriptionView';
+import KnowledgeBaseView from './KnowledgeBaseView';
+import { StreamIcon } from './icons/StreamIcon';
+import VRSceneViewer from './VRSceneViewer';
 
 interface ChatMessageProps {
   message: Message;
@@ -31,6 +35,9 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
 
   const Avatar = ({ sender }: { sender: Sender }) => {
     const iconClass = "w-8 h-8 p-1.5 rounded-full";
+    if (message.isLiveStream) {
+        return <div className={`${iconClass} bg-green-500/50 text-black`}><StreamIcon /></div>
+    }
     if (sender === 'ai') {
         return <div className={`${iconClass} bg-accent text-black`}><BotIcon /></div>
     }
@@ -43,7 +50,9 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
           <Avatar sender={message.sender} />
       </div>
       <div className={`w-full max-w-2xl px-4 py-3 rounded-lg ${
-        isAI 
+        message.isLiveStream
+        ? 'bg-layer-1 border border-dashed border-green-500/50'
+        : isAI 
         ? 'bg-layer-1' 
         : 'bg-accent text-black'
       }`}>
@@ -91,18 +100,23 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
                                     ? "Synthesizing video... this may take a few minutes, Captain."
                                     : message.media.type === 'audio'
                                     ? "Synthesizing audio track..."
+                                     : message.media.type === 'vr'
+                                    ? "Forging VR scene..."
                                     : "Generating image..."}
                             </span>
                         </div>
                     )}
-                    {message.media.status === 'complete' && message.media.type === 'image' && (
+                    {message.media.status === 'complete' && message.media.type === 'image' && message.media.url && (
                         <img src={message.media.url} alt={message.media.prompt} className="rounded-lg max-w-full sm:max-w-sm border-2 border-layer-3" />
                     )}
-                    {message.media.status === 'complete' && message.media.type === 'video' && (
+                    {message.media.status === 'complete' && message.media.type === 'video' && message.media.url && (
                         <video src={message.media.url} controls className="rounded-lg max-w-full sm:max-w-sm border-2 border-layer-3" />
                     )}
-                    {message.media.status === 'complete' && message.media.type === 'audio' && (
+                    {message.media.status === 'complete' && message.media.type === 'audio' && message.media.url && (
                         <audio src={message.media.url} controls className="w-full sm:max-w-sm" />
+                    )}
+                    {message.media.status === 'complete' && message.media.type === 'vr' && (
+                        <VRSceneViewer sceneHtml={message.media.content} />
                     )}
                     {message.media.status === 'error' && (
                         <p className="text-sm text-danger font-mono">Generation failed, Captain.</p>
@@ -118,6 +132,12 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
         )}
         {message.workflowData && (
             <WorkflowDataView data={message.workflowData} />
+        )}
+        {message.transcriptionData && (
+            <TranscriptionView data={message.transcriptionData} />
+        )}
+        {message.knowledgeBaseData && (
+            <KnowledgeBaseView data={message.knowledgeBaseData} />
         )}
       </div>
     </div>

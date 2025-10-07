@@ -1,3 +1,5 @@
+import { Part } from "@google/genai";
+
 // FIX: Removed self-import of 'Sender' which was causing a name conflict.
 export type Sender = 'user' | 'ai';
 
@@ -74,6 +76,43 @@ export interface WorkflowData {
     dags: DAG[];
 }
 
+export interface TranscriptionData {
+    fileName: string;
+    transcription: string;
+}
+
+export interface IndexedDocument {
+    id: string;
+    sourceName: string;
+    sourceType: 'url' | 'file';
+    indexedAt: string;
+    chunkCount: number;
+}
+
+export interface KnowledgeBaseData {
+    documents: IndexedDocument[];
+}
+
+export interface MissionNode {
+    name: string;
+    emoji: string;
+    color: string;
+}
+
+export type MissionStatus = 'Standby' | 'Active' | 'Completed' | 'Failed';
+
+export interface Mission {
+    id: string;
+    name: string;
+    objective: string;
+    flow: MissionNode[];
+    status: MissionStatus;
+}
+
+export interface MissionData {
+    missions: Mission[];
+}
+
 export interface Message {
   id: string;
   text: string;
@@ -81,14 +120,19 @@ export interface Message {
   attachments?: Attachment[];
   status?: 'generating' | 'complete' | 'error';
   media?: {
-    type: 'image' | 'video' | 'audio';
-    url: string;
+    type: 'image' | 'video' | 'audio' | 'vr';
+    url?: string;
+    content?: string;
     prompt: string;
     status?: 'generating' | 'complete' | 'error';
   };
   huggingFaceData?: HuggingFaceResult;
   financialData?: FinancialData;
   workflowData?: WorkflowData;
+  transcriptionData?: TranscriptionData;
+  knowledgeBaseData?: KnowledgeBaseData;
+  missionData?: MissionData;
+  isLiveStream?: boolean;
 }
 
 export interface Track {
@@ -116,3 +160,8 @@ export interface Pose {
     name: string;
     score: number;
 }
+
+export type LiveStreamState = {
+    source: string | null;
+    status: 'idle' | 'active' | 'error';
+};

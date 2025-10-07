@@ -105,6 +105,54 @@ export const generateAudioFromAI = async (prompt: string): Promise<string> => {
     return mockAudioUrl;
 }
 
+export const generateVRSceneFromAI = async (prompt: string): Promise<string> => {
+    const vrSystemInstruction = `You are an expert A-Frame developer. Your task is to generate a complete, single A-Frame HTML scene based on the user's request.
+- The output MUST be only the A-Frame markup.
+- The entire response should be wrapped in an \`<a-scene>\` tag.
+- Do NOT include \`<html>\`, \`<head>\`, \`<body>\`, or \`<script>\` tags.
+- Use primitive shapes like \`<a-box>\`, \`<a-sphere>\`, \`<a-cylinder>\`, \`<a-plane>\`, \`<a-sky>\`.
+- You can use assets, but they must be declared in an \`<a-assets>\` block and loaded from publicly accessible URLs (e.g., from Sketchfab, Google Poly).
+- Make the scene visually interesting and immersive. Add animations or interactivity if it fits the prompt.
+- Ensure the scene is well-lit using lights or environment presets.
+- The final output should be a single block of A-Frame HTML code.`;
+
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+            systemInstruction: vrSystemInstruction,
+        }
+    });
+
+    // The Gemini API might wrap the code in markdown, so we need to clean it.
+    const rawText = response.text;
+    const codeBlockRegex = /```(?:html)?\s*([\s\S]*?)\s*```/;
+    const match = rawText.match(codeBlockRegex);
+
+    if (match && match[1]) {
+        return match[1].trim();
+    }
+    
+    // If no markdown block is found, assume the whole response is the code.
+    return rawText.trim();
+};
+
+export const transcribeAudio = async (file: File): Promise<string> => {
+    console.log(`Simulating transcription for file: ${file.name}`);
+    await new Promise(resolve => setTimeout(resolve, 3000)); // Simulate processing time
+
+    return `
+[00:00:01] **Operator Alpha:** Mission status check. All systems nominal.
+[00:00:05] **Operator Bravo:** Confirmed. Orbit is stable. We're tracking the anomaly on schedule.
+[00:00:10] **Operator Alpha:** Any new developments on the signal source?
+[00:00:13] **Operator Bravo:** Negative. Still faint. Looks like a repeating pattern, but the resolution is too low to decode. We'll need to deploy the deep-space probe for a closer look.
+[00:00:21] **Operator Alpha:** Understood. The Captain has already authorized the deployment. Proceed when ready.
+[00:00:25] **Operator Bravo:** Roger that. Initiating probe deployment sequence now.
+[00:00:29] **[STATIC]**
+[00:00:32] **Operator Alpha:** ...signal strength is dropping. We might be losing them.
+`;
+}
+
 
 // Function to reset the chat if needed, e.g., for a "new chat" button.
 export const resetChat = () => {

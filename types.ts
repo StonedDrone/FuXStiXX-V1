@@ -1,6 +1,5 @@
 import { Part } from "@google/genai";
 
-// FIX: Removed self-import of 'Sender' which was causing a name conflict.
 export type Sender = 'user' | 'ai';
 
 export interface Attachment {

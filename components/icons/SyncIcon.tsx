@@ -1,6 +1,5 @@
 import React from 'react';
 
-// FIX: Added style prop to allow for inline styles like animationDuration.
 export const SyncIcon: React.FC<{ className?: string; style?: React.CSSProperties }> = ({ className, style }) => (
     <svg 
         xmlns="http://www.w3.org/2000/svg" 

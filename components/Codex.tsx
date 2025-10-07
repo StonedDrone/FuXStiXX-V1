@@ -10,7 +10,6 @@ interface CodexProps {
 
 const Codex: React.FC<CodexProps> = ({ isOpen, onClose }) => {
     
-    // FIX: Explicitly type the inline component with React.FC to correctly handle the 'key' prop.
     const PowerEntry: React.FC<{ power: typeof POWERS[0]}> = ({ power }) => (
         <div 
             className="mb-4 border-b-2 pb-2 transition-all duration-300"

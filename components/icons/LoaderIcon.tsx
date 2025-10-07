@@ -1,6 +1,5 @@
 import React from 'react';
 
-// FIX: Added className prop to allow for custom styling from parent components.
 export const LoaderIcon: React.FC<{ className?: string }> = ({ className }) => (
     <svg 
         xmlns="http://www.w3.org/2000/svg" 

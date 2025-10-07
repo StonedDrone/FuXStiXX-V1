@@ -118,9 +118,6 @@ export const useEmotionDetection = () => {
             animationFrameId.current = requestAnimationFrame(detectionLoop);
 
         } catch (err) {
-            // FIX: Replaced unsafe type casting with a robust error handling block that
-            // correctly checks for different error types (standard Error vs. Human library's custom error object)
-            // to prevent type assertion errors and provide a more accurate error message.
             console.error("Failed to start emotion detection:", err);
             let message = "Camera access denied or unavailable.";
             if (err instanceof Error) {

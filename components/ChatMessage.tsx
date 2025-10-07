@@ -30,7 +30,6 @@ interface ChatMessageProps {
 
 const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEditMedia }) => {
   const isAI = message.sender === 'ai';
-  // FIX: Corrected typo in type from HTMLDivDivElement to HTMLDivElement.
   const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

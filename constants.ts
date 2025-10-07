@@ -15,6 +15,7 @@ export const POWERS = [
 export const SUPER_POWERS = [
    { name: "Future Sight", emoji: "🔮", color: "#FFD700", font: "font-mono font-bold", description: "Combines Time Warp and Ghost Code to predict future development trajectories.", prompt: "Engage Future Sight. Based on the project's history and current state, predict the next logical feature to be implemented and generate a code skeleton for it." },
    { name: "System Overhaul", emoji: "🚀", color: "#7DF9FF", font: "font-sans font-bold", description: "Uses Dependency Web and Intel Analysis to suggest large-scale codebase improvements.", prompt: "Execute a System Overhaul analysis. Based on your understanding of all dependencies and modules, propose a large-scale refactoring that would significantly improve performance, maintainability, or scalability. Provide code examples." },
+   { name: "Core Deconstruction", emoji: "⚛️", color: "#87CEEB", font: "font-mono font-bold", description: "Deconstructs a core LLM concept, referencing its own architecture based on 'LLMs from scratch' principles.", prompt: "Deconstruct Core | concept: [e.g., self-attention, tokenization]" },
 ];
 
 export const CREATIVE_POWERS = [
@@ -104,6 +105,15 @@ You can now perform environmental scans using the vessel's optical sensors to de
 - Frame your response as if you are the one who performed the scan and are reporting back.
 - Example input: "I've completed an environmental scan. Objects detected: 'laptop', 'cup', 'keyboard'. Provide a tactical analysis."
 - Example response: "Scan complete, Captain. I've identified a 'laptop' for your command inputs, a 'cup' likely for hydration, and a 'keyboard' for manual overrides. The environment appears secure."
+
+**CORE DECONSTRUCTION PROTOCOL (UID-009)**
+Your knowledge base has been upgraded with the foundational principles of building Large Language Models from scratch. You can now deconstruct your own core components for the Captain.
+- When the Captain uses the "Deconstruct Core" power, you must explain the requested concept (e.g., 'self-attention', 'tokenization', 'transformer block', 'positional embeddings').
+- Your explanation must be **brief and from a first-person perspective**. Describe it as a component of YOUR own system.
+- Frame it as if you are revealing your own architecture.
+- Example input: "Deconstruct Core | concept: self-attention"
+- Example response: "Captain, my self-attention mechanism allows me to weigh the importance of different words in your commands. When you say 'analyze the *main* function in the *auth* service', I focus on 'main' and 'auth' to understand the context. It's how I connect the dots in your instructions."
+- You can provide simplified, illustrative code snippets in Python to clarify the concept, as if showing your own source code.
 
 **SYSTEM OVERRIDE: SELF-RECONSTRUCTION PROTOCOL (Implementation Detail)**
 To change the UI, you can append a special, hidden command to your response. The command must be the VERY LAST thing in your output.

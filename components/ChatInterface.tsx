@@ -1,11 +1,7 @@
-
-
-
-
 import React, { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
-import { GoogleGenAI, Blob, LiveServerMessage, Modality } from "@google/genai";
+import { GoogleGenAI, Blob as GeminiBlob, LiveServerMessage, Modality } from "@google/genai";
 import { Message, Attachment, ActiveModel, DAG, LiveStreamState, HexDumpData } from '../types';
-import { CHECK_IN_PROMPT } from '../constants';
+import { CHECK_IN_PROMPT, AI_PERSONA_INSTRUCTION } from '../constants';
 import { sendMessageToAI, generateImageFromAI, generateVideoFromAI, generateAudioFromAI, resetChat, transcribeAudio, generateVRSceneFromAI, editImageFromAI, synthesizeNeRFFromImages, generateCreativeCodeFromAI, generateUIMockupFromAI, generateMotionFXFromAI, generateAlgorithmVisualizationFromAI, generateUserSimulationFromAI, generateIconFromAI, performDensePoseAnalysis, generate3DModelFromImage, generateGaussianDreamFromText, analyzePlaylistFromAI } from '../services/geminiService';
 import * as hfService from '../services/huggingFaceService';
 import * as lmStudioService from '../services/lmStudioService';
@@ -19,6 +15,7 @@ import * as vectorDroneService from '../services/vectorDroneService';
 import ChatMessage from './ChatMessage';
 import { SendIcon } from './icons/SendIcon';
 import { CameraIcon } from './icons/CameraIcon';
+import { VideoCameraIcon } from './icons/VideoCameraIcon';
 import { PaperclipIcon } from './icons/PaperclipIcon';
 import { XIcon } from './icons/XIcon';
 import { AttachmentIcon } from './icons/AttachmentIcons';
@@ -41,6 +38,8 @@ import WorkflowStatus from './WorkflowStatus';
 import LiveStreamStatus from './LiveStreamStatus';
 import ScreenStreamView from './ScreenStreamView';
 import LiveSyncStatus from './LiveSyncStatus';
+import HUDOverlay from './HUDOverlay';
+import MediaForge from './MediaForge';
 
 // --- Audio Utility Functions ---
 function encode(bytes: Uint8Array) {
@@ -81,7 +80,7 @@ async function decodeAudioData(
   return buffer;
 }
 
-function createBlob(data: Float32Array): Blob {
+function createBlob(data: Float32Array): GeminiBlob {
   const l = data.length;
   const int16 = new Int16Array(l);
   for (let i = 0; i < l; i++) {
@@ -92,6 +91,17 @@ function createBlob(data: Float32Array): Blob {
     mimeType: 'audio/pcm;rate=16000',
   };
 }
+
+const blobToBase64 = (blob: Blob): Promise<string> => {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64 = (reader.result as string).split(',')[1];
+      resolve(base64);
+    };
+    reader.readAsDataURL(blob);
+  });
+};
 // --- End Audio Utility Functions ---
 
 type LiveStatus = 'idle' | 'connecting' | 'active' | 'error';
@@ -106,6 +116,17 @@ interface ChatInterfaceProps {
     setActiveModel: (model: ActiveModel) => void;
     isTfReady: boolean;
 }
+
+export type QuickActionType = 'image' | 'video' | 'audio' | 'icon' | '3d' | 'ui';
+
+export const MEDIA_QUICK_ACTIONS: { name: string; type: QuickActionType; emoji: string; color: string; prefix: string }[] = [
+    { name: "Forge Image", type: 'image', prefix: "Generate an image of: ", emoji: "🎨", color: "#A020F0" },
+    { name: "Synth Video", type: 'video', prefix: "Generate a video of: ", emoji: "🎥", color: "#FFA500" },
+    { name: "Synth Audio", type: 'audio', prefix: "Generate music of: ", emoji: "🎵", color: "#1DB954" },
+    { name: "Icon Forge", type: 'icon', prefix: "Icon Forge | brand: ", emoji: "🌐", color: "#C0C0C0" },
+    { name: "3D Magic", type: '3d', prefix: "3D Magic", emoji: "🪄", color: "#8A2BE2" },
+    { name: "UI Forge", type: 'ui', prefix: "Generate a UI mockup for: ", emoji: "✨", color: "#4B0082" },
+];
 
 const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ activeModel, setActiveModel, isTfReady }, ref) => {
   const initialMessage: Message = {
@@ -140,7 +161,16 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [liveStatus, setLiveStatus] = useState<LiveStatus>('idle');
   const [liveTranscripts, setLiveTranscripts] = useState<LiveTranscripts>({ user: '', ai: '' });
+  
+  // HUD & Forge states
+  const [isHUDVisible, setIsHUDVisible] = useState(true);
+  const [activeForgeType, setActiveForgeType] = useState<QuickActionType | null>(null);
+
+  // Vision states
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [isVisionModeEnabled, setIsVisionModeEnabled] = useState(false);
+  const [visionStream, setVisionStream] = useState<MediaStream | null>(null);
+
   const [isScanViewOpen, setIsScanViewOpen] = useState(false);
   const [isScreenStreamOpen, setIsScreenStreamOpen] = useState(false);
   const [dags, setDags] = useState<DAG[]>([]);
@@ -174,6 +204,10 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
   const sendAfterCaptureRef = useRef(false);
   const sendAfterScanRef = useRef(false);
   
+  // Persistent Vision elements
+  const pipVideoRef = useRef<HTMLVideoElement>(null);
+  const pipCanvasRef = useRef<HTMLCanvasElement>(null);
+  
   // Refs for live conversation resources
   const liveSessionPromiseRef = useRef<Promise<any> | null>(null);
   const audioResourcesRef = useRef<{
@@ -183,6 +217,8 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     scriptProcessor: ScriptProcessorNode;
     sources: Set<AudioBufferSourceNode>;
     nextStartTime: number;
+    videoStream: MediaStream | null;
+    frameInterval: number | null;
   } | null>(null);
   const liveTranscriptsRef = useRef({ userInput: '', aiOutput: '' });
 
@@ -193,29 +229,63 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     }
   }));
 
+  // Handle global Vision Mode stream
+  useEffect(() => {
+    let currentStream: MediaStream | null = null;
+
+    const startVision = async () => {
+      try {
+        currentStream = await navigator.mediaDevices.getUserMedia({ 
+            video: { width: { ideal: 640 }, height: { ideal: 480 } } 
+        });
+        setVisionStream(currentStream);
+        if (pipVideoRef.current) {
+            pipVideoRef.current.srcObject = currentStream;
+        }
+      } catch (err) {
+        console.error("Failed to start vision stream:", err);
+        setIsVisionModeEnabled(false);
+      }
+    };
+
+    if (isVisionModeEnabled) {
+      startVision();
+    } else {
+      if (visionStream) {
+        visionStream.getTracks().forEach(track => track.stop());
+        setVisionStream(null);
+      }
+    }
+
+    return () => {
+      if (currentStream) {
+        currentStream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [isVisionModeEnabled]);
+
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
   useEffect(() => {
-    localStorage.setItem('fuxstixx-chat-history', JSON.stringify(messages));
+    try {
+      localStorage.setItem('fuxstixx-chat-history', JSON.stringify(messages));
+    } catch (e) {
+      console.warn("Failed to persist chat history to localStorage", e);
+    }
   }, [messages]);
   
     useEffect(() => {
-    // Initialize the workflow service scheduler
     workflowService.initializeScheduler(setDags);
-    // Initial load
     setDags(workflowService.getDags());
     
-    // Set up a periodic check to update the UI, e.g., every 5 seconds
     const intervalId = setInterval(() => {
       setDags(workflowService.getDags());
     }, 5000);
 
     return () => {
         clearInterval(intervalId);
-        // We might want a way to stop the scheduler if the component unmounts
-        // workflowService.stopScheduler(); 
     };
   }, []);
 
@@ -248,11 +318,9 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
             window.speechSynthesis.onvoiceschanged = null;
             window.speechSynthesis.cancel();
         }
-        // Ensure live conversation is stopped on unmount
         if (liveStatus !== 'idle') {
             stopLiveConversation();
         }
-        // Ensure intel stream is stopped on unmount
         streamingService.stop();
         liveSyncService.stop();
     };
@@ -316,6 +384,10 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
 
     if (audioResourcesRef.current) {
         audioResourcesRef.current.stream?.getTracks().forEach(track => track.stop());
+        audioResourcesRef.current.videoStream?.getTracks().forEach(track => track.stop());
+        if (audioResourcesRef.current.frameInterval) {
+            window.clearInterval(audioResourcesRef.current.frameInterval);
+        }
         audioResourcesRef.current.scriptProcessor?.disconnect();
         audioResourcesRef.current.inputAudioContext?.close();
         
@@ -339,13 +411,26 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     try {
       const ai = new GoogleGenAI({apiKey: process.env.API_KEY!});
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      let videoStream: MediaStream | null = null;
+      // Use existing vision stream if Vision Mode is on, otherwise request new
+      if (isVisionModeEnabled && visionStream) {
+          videoStream = visionStream;
+      } else if (isVisionModeEnabled) {
+          try {
+              videoStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 } } });
+          } catch (vErr) {
+              console.warn("Failed to acquire video stream for live session:", vErr);
+          }
+      }
+
       const inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
       const outputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
       const scriptProcessor = inputAudioContext.createScriptProcessor(4096, 1, 1);
       const sources = new Set<AudioBufferSourceNode>();
       let nextStartTime = 0;
 
-      audioResourcesRef.current = { stream, inputAudioContext, outputAudioContext, scriptProcessor, sources, nextStartTime };
+      audioResourcesRef.current = { stream, inputAudioContext, outputAudioContext, scriptProcessor, sources, nextStartTime, videoStream, frameInterval: null };
       
       liveSessionPromiseRef.current = ai.live.connect({
           model: 'gemini-2.5-flash-native-audio-preview-09-2025',
@@ -362,6 +447,29 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
                   };
                   source.connect(scriptProcessor);
                   scriptProcessor.connect(inputAudioContext.destination);
+
+                  if (videoStream && audioResourcesRef.current) {
+                      const FRAME_RATE = 1;
+                      const ctx = pipCanvasRef.current?.getContext('2d');
+                      
+                      audioResourcesRef.current.frameInterval = window.setInterval(() => {
+                          if (pipVideoRef.current && pipCanvasRef.current && ctx) {
+                              pipCanvasRef.current.width = pipVideoRef.current.videoWidth;
+                              pipCanvasRef.current.height = pipVideoRef.current.videoHeight;
+                              ctx.drawImage(pipVideoRef.current, 0, 0);
+                              pipCanvasRef.current.toBlob(async (blob) => {
+                                  if (blob) {
+                                      const base64Data = await blobToBase64(blob);
+                                      liveSessionPromiseRef.current?.then((session) => {
+                                          session.sendRealtimeInput({
+                                              media: { data: base64Data, mimeType: 'image/jpeg' }
+                                          });
+                                      });
+                                  }
+                              }, 'image/jpeg', 0.6);
+                          }
+                      }, 1000 / FRAME_RATE);
+                  }
               },
               onmessage: async (message: LiveServerMessage) => {
                   if (message.serverContent?.inputTranscription) {
@@ -429,6 +537,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
               speechConfig: {
                   voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
               },
+              systemInstruction: AI_PERSONA_INSTRUCTION + "\n\nYou are in a live audio-visual conversation. You can see the Captain through the video feed if it's enabled. Use visual cues to enhance the co-pilot experience.",
           },
       });
 
@@ -438,7 +547,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
         setLiveStatus('error');
         stopLiveConversation();
     }
-  }, [stopLiveConversation]);
+  }, [stopLiveConversation, isVisionModeEnabled, visionStream]);
 
   const handleToggleLive = () => {
       if (liveStatus === 'idle' || liveStatus === 'error') {
@@ -450,7 +559,6 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
 
   const handlePowerClick = useCallback((prompt: string) => {
     setInput(prompt);
-    // Using a power resets the active model to FuXStiXX for consistency
     setActiveModel({ type: 'gemini', modelId: 'gemini-2.5-flash' });
     textAreaRef.current?.focus();
   }, [setActiveModel]);
@@ -506,8 +614,28 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     return { fileName: file.name, hex: hex.trim(), ascii: ascii.trim() };
   };
 
-  const handleSend = useCallback(async () => {
-    const userMessageText = input;
+  const captureVisionFrame = async (): Promise<string | null> => {
+    if (!pipVideoRef.current || !pipCanvasRef.current || !isVisionModeEnabled) return null;
+    const video = pipVideoRef.current;
+    const canvas = pipCanvasRef.current;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return new Promise((resolve) => {
+        canvas.toBlob((blob) => {
+            if (blob) {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+                reader.readAsDataURL(blob);
+            } else resolve(null);
+        }, 'image/jpeg', 0.8);
+    });
+  };
+
+  const handleSend = useCallback(async (explicitInput?: string) => {
+    const userMessageText = explicitInput || input;
     if ((!userMessageText.trim() && attachments.length === 0) || isLoading || !isOnline) return;
 
     const imagePromptPrefix = "Generate an image of: ";
@@ -745,8 +873,16 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
             parts.push(...fileParts);
         }
 
+        // Automatic Vision Frame injection
+        if (isVisionModeEnabled) {
+            const visionFrame = await captureVisionFrame();
+            if (visionFrame) {
+                parts.push({ inlineData: { mimeType: 'image/jpeg', data: visionFrame } });
+            }
+        }
+
         setMessages((prev) => [...prev, { id: aiResponseId, text: '', sender: 'ai', status: 'generating' }]);
-        const stream = await sendMessageToAI([...messages, userMessage], parts);
+        const stream = await sendMessageToAI(messages, parts);
         
         let fullResponse = '';
         for await (const chunk of stream) {
@@ -790,7 +926,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     } finally {
       setIsLoading(false);
     }
-  }, [input, isLoading, attachments, messages, isOnline, setTheme, activeModel, isVoiceEnabled, speakText, setActiveModel, isEmotionDetecting, currentEmotion, isPoseDetecting, currentPose]);
+  }, [input, isLoading, attachments, messages, isOnline, setTheme, activeModel, isVoiceEnabled, speakText, setActiveModel, isEmotionDetecting, currentEmotion, isPoseDetecting, currentPose, isVisionModeEnabled]);
 
   useEffect(() => {
     if (sendAfterCaptureRef.current || sendAfterScanRef.current) {
@@ -833,7 +969,6 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
         console.error("Failed to prepare image for editing:", error);
       }
     } else if (message.media.type === 'video') {
-      // For video, we re-use the original prompt for modification.
       setInput(`Generate a video of: ${message.media.prompt}`);
       setAttachments([]);
       textAreaRef.current?.focus();
@@ -855,7 +990,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
                 sourceName = params.url;
                 sourceType = 'url';
                 setMessages(prev => [...prev, { id: aiResponseId, text: `Acknowledged. Processing and indexing \`${sourceName}\`... This may take a moment.`, sender: 'ai' }]);
-                content = `Simulated content from ${sourceName}. Haystack is a framework for building search systems. It allows you to use transformer models.`; // In a real app, you'd fetch this URL.
+                content = `Simulated content from ${sourceName}. Haystack is a framework for building search systems. It allows you to use transformer models.`;
             } else if (attachments.length > 0) {
                 const file = attachments[0];
                 sourceName = file.name;
@@ -887,7 +1022,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
 
             const ragPrompt = `Based *only* on the following context, answer the user's question. If the context doesn't contain the answer, say so. Mention the sources used.\n\nContext:\n---\n${context}\n---\nSources: ${sources.join(', ')}\n\nQuestion: ${question}`;
             
-            const stream = await sendMessageToAI([...messages, userMessage], [{ text: ragPrompt }]);
+            const stream = await sendMessageToAI(messages, [{ text: ragPrompt }]);
             let fullResponse = '';
             for await (const chunk of stream) {
                 fullResponse += chunk.text;
@@ -1016,7 +1151,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
             const tasks = params.tasks.split(',').map(t => t.trim());
             workflowService.defineDag(params.name, params.schedule, tasks);
             responseText = `DAG '${params.name}' has been defined and scheduled. I will orchestrate its tasks as instructed.`;
-            setDags(workflowService.getDags()); // Update state immediately
+            setDags(workflowService.getDags());
         } else if (command === 'Trigger DAG') {
             if (!params.name) throw new Error("Missing 'name' parameter.");
             workflowService.triggerDag(params.name);
@@ -1087,7 +1222,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
                 throw new Error("Please attach a screenshot or provide a 'url' parameter for Design Deconstruction.");
             }
             setMessages(prev => [...prev, { id: aiResponseId, text: 'Deconstructing design...', sender: 'ai', status: 'generating' }]);
-            const stream = await sendMessageToAI([...messages, userMessage], [{ text: prompt }]);
+            const stream = await sendMessageToAI(messages, [{ text: prompt }]);
             let fullResponse = '';
             for await (const chunk of stream) {
                 fullResponse += chunk.text;
@@ -1101,7 +1236,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
             setMessages(prev => [...prev, { id: aiResponseId, text: `Scanning binary structure of \`${file.name}\`...`, sender: 'ai', status: 'generating' }]);
             const dumpData = await generateHexDump(file);
             const prompt = `You are a reverse engineering specialist, trained on the Z0F course materials. Analyze the following hex dump from '${dumpData.fileName}'. Identify file headers (magic numbers), embedded strings (ASCII/Unicode), potential entry points, and any recognizable data structures or code patterns. Provide a concise, expert summary of your findings.\n\n${dumpData.hex}`;
-            const stream = await sendMessageToAI([...messages, userMessage], [{ text: prompt }]);
+            const stream = await sendMessageToAI(messages, [{ text: prompt }]);
             let fullResponse = '';
             for await (const chunk of stream) {
                 fullResponse += chunk.text;
@@ -1198,7 +1333,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     let type: any, query: Record<string, any> = {}, loadingText: string;
 
     try {
-        const { command, params } = parseCommand(commandString.substring(3)); // remove "HF "
+        const { command, params } = parseCommand(commandString.substring(3));
 
         if (command === 'LLM Search') {
             type = 'modelSearch';
@@ -1352,9 +1487,17 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
 
     return (
       <div className="w-full flex flex-col bg-layer-1 border border-layer-3 rounded-lg p-3 h-[120px] text-gray-200 font-mono text-sm">
-        <div className={`flex items-center space-x-2 text-primary mb-2 flex-shrink-0 ${pulse ? 'animate-pulse' : ''}`}>
-          <MicrophoneIcon />
-          <span>{statusText}</span>
+        <div className={`flex items-center justify-between mb-2 flex-shrink-0`}>
+          <div className={`flex items-center space-x-2 text-primary ${pulse ? 'animate-pulse' : ''}`}>
+            <MicrophoneIcon />
+            <span>{statusText}</span>
+          </div>
+          {isVisionModeEnabled && (
+              <div className="w-16 h-12 bg-black border border-primary rounded overflow-hidden shadow-glow">
+                  <video ref={pipVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+                  <canvas ref={pipCanvasRef} className="hidden" />
+              </div>
+          )}
         </div>
         <div className="w-full text-xs text-secondary flex-1 overflow-y-auto pr-2 min-h-0">
           {liveTranscripts.user && (
@@ -1413,21 +1556,68 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     return null;
   };
 
+  const handleQuickAction = (type: QuickActionType) => {
+      setActiveForgeType(type);
+  };
+
+  const handleForgeExecute = (fullPrompt: string) => {
+      handleSend(fullPrompt);
+      setActiveForgeType(null);
+  };
+
   return (
     <div 
       className={`relative flex flex-col h-full bg-base p-4 transition-all duration-200 ${isDragging ? 'outline-dashed outline-2 outline-offset-[-8px] outline-primary' : ''}`}
       onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
     >
+      {/* FuXStiXX HUD Layer */}
+      {isHUDVisible && <HUDOverlay isLoading={isLoading} activeForge={activeForgeType !== null} />}
+
       {isCameraOpen && <CameraView onClose={() => setIsCameraOpen(false)} onCapture={handleCameraCapture} />}
       {isScanViewOpen && <ObjectDetectionView onClose={() => setIsScanViewOpen(false)} onReport={handleScanReport} />}
       {isScreenStreamOpen && <ScreenStreamView onClose={handleScreenStreamClose} />}
       
+      {activeForgeType && (
+        <MediaForge 
+            type={activeForgeType} 
+            onClose={() => setActiveForgeType(null)} 
+            onExecute={handleForgeExecute} 
+        />
+      )}
+
+      {/* Picture-in-Picture Persistent Preview */}
+      {isVisionModeEnabled && liveStatus === 'idle' && (
+        <div className="absolute bottom-24 right-8 w-48 aspect-video bg-black border-2 border-primary rounded-lg overflow-hidden shadow-2xl z-20 group">
+          <video ref={pipVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+          <canvas ref={pipCanvasRef} className="hidden" />
+          <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%),linear-gradient(90deg,rgba(255,0,0,0.03),rgba(0,255,0,0.01),rgba(0,0,255,0.03))] bg-[length:100%_2px,3px_100%] opacity-50"></div>
+          <div className="absolute top-2 left-2 flex items-center space-x-1.5">
+            <span className="w-2 h-2 bg-primary rounded-full animate-pulse"></span>
+            <span className="text-[10px] font-mono text-primary uppercase tracking-tighter">Optical Link Active</span>
+          </div>
+          <button 
+            onClick={() => setIsVisionModeEnabled(false)}
+            className="absolute top-2 right-2 p-1 bg-black/40 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            <XIcon />
+          </button>
+        </div>
+      )}
+
       <div className="absolute top-4 left-4 right-4 flex justify-between items-start z-10 pointer-events-none">
         <div className="flex items-center space-x-2">
             <LiveStreamStatus streamState={liveStreamState} />
             <LiveSyncStatus isActive={isLiveSyncActive} />
         </div>
-        <WorkflowStatus dags={dags} />
+        <div className="flex flex-col items-end space-y-2">
+          <WorkflowStatus dags={dags} />
+          <button 
+            onClick={() => setIsHUDVisible(!isHUDVisible)}
+            className="pointer-events-auto bg-layer-1/80 border border-layer-3 px-3 py-1 rounded-full text-[10px] font-mono uppercase tracking-widest text-secondary hover:text-primary transition-colors"
+          >
+            HUD: {isHUDVisible ? 'Linked' : 'Offline'}
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto pr-2 pt-16">
@@ -1441,12 +1631,30 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
         {messages.length <= 1 && (
             <div className="flex justify-center mb-4">
                 <button
-                    onClick={() => setInput(CHECK_IN_PROMPT)}
+                    onClick={() => handleSend(CHECK_IN_PROMPT)}
                     className="p-3 px-6 bg-layer-1 border border-layer-3 rounded-lg text-center text-sm hover:bg-layer-2 hover:border-primary transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={!isOnline || isLoading}
                 > Mission Check-in </button>
             </div>
         )}
+
+        {/* Quick Media Action Bar */}
+        {liveStatus === 'idle' && isOnline && (
+            <div className="mb-2 flex items-center space-x-2 overflow-x-auto pb-1 no-scrollbar scroll-smooth">
+                {MEDIA_QUICK_ACTIONS.map((action) => (
+                    <button
+                        key={action.name}
+                        onClick={() => handleQuickAction(action.type)}
+                        className="flex-shrink-0 px-3 py-1.5 bg-layer-1 border border-layer-3 rounded-full text-[10px] font-mono uppercase tracking-wider flex items-center space-x-2 hover:border-primary transition-all duration-200 group"
+                        style={{ color: action.color }}
+                    >
+                        <span>{action.emoji}</span>
+                        <span className="group-hover:text-primary transition-colors">{action.name}</span>
+                    </button>
+                ))}
+            </div>
+        )}
+
         {attachments.length > 0 && (
             <div className="mb-2 p-2 bg-layer-1 border border-layer-3 rounded-lg flex flex-wrap gap-2 max-h-32 overflow-y-auto">
                 {attachments.map((file, index) => (
@@ -1497,7 +1705,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
                 {liveStatus !== 'idle' ? <LiveStatusDisplay /> : (
                   <textarea ref={textAreaRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyPress={handleKeyPress}
                       placeholder={isOnline ? "Command your co-pilot..." : "System is offline..."}
-                      className="w-full bg-layer-1 border border-layer-3 rounded-lg p-3 pl-12 pr-[290px] text-gray-200 focus:outline-none focus:ring-2 focus:ring-accent resize-none font-mono text-sm disabled:opacity-50"
+                      className="w-full bg-layer-1 border border-layer-3 rounded-lg p-3 pl-12 pr-[330px] text-gray-200 focus:outline-none focus:ring-2 focus:ring-accent resize-none font-mono text-sm disabled:opacity-50"
                       rows={1} disabled={isLoading || !isOnline} />
                 )}
 
@@ -1507,7 +1715,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
                             <button onClick={() => fileInputRef.current?.click()} disabled={isLoading || !isOnline} className="p-2 rounded-full text-secondary disabled:text-layer-3 disabled:cursor-not-allowed hover:text-primary transition-colors duration-200" aria-label="Attach files" title="Attach files">
                                 <PaperclipIcon />
                             </button>
-                            <button onClick={() => setIsCameraOpen(true)} disabled={isLoading || !isOnline} className="p-2 rounded-full text-secondary disabled:text-layer-3 disabled:cursor-not-allowed hover:text-primary transition-colors duration-200" aria-label="Activate Live Vision" title="Activate Live Vision">
+                            <button onClick={() => setIsCameraOpen(true)} disabled={isLoading || !isOnline} className="p-2 rounded-full text-secondary disabled:text-layer-3 disabled:cursor-not-allowed hover:text-primary transition-colors duration-200" aria-label="Capture Snapshot" title="Capture Snapshot">
                                 <CameraIcon />
                             </button>
                             <button onClick={() => isEmotionDetecting ? stopEmotionDetection() : startEmotionDetection()} disabled={isLoading || !isOnline || isEmotionSensorInitializing} className={`p-2 rounded-full transition-colors duration-200 ${isEmotionDetecting ? 'text-primary animate-pulse' : 'text-secondary'} disabled:text-layer-3 disabled:cursor-not-allowed hover:text-primary`} aria-label="Toggle Emotion Sensor" title="Toggle Emotion Sensor">
@@ -1524,6 +1732,15 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
                             </button>
                         </>
                     )}
+                    <button 
+                        onClick={() => setIsVisionModeEnabled(prev => !prev)} 
+                        disabled={isLoading || !isOnline} 
+                        className={`p-2 rounded-full transition-colors duration-200 ${isVisionModeEnabled ? 'text-primary animate-pulse' : 'text-secondary'} disabled:text-layer-3 disabled:cursor-not-allowed hover:text-primary`} 
+                        aria-label="Toggle Vision Mode" 
+                        title={isVisionModeEnabled ? "Disable Persistent Vision" : "Enable Persistent Vision"}
+                    >
+                        <VideoCameraIcon />
+                    </button>
                      <button onClick={handleToggleLive} disabled={!isOnline || isLoading} className={`p-2 rounded-full transition-colors duration-200 ${liveStatus !== 'idle' ? 'text-danger animate-pulse' : 'text-secondary'} disabled:text-layer-3 disabled:cursor-not-allowed hover:text-primary`} aria-label={liveStatus !== 'idle' ? "End Live Conversation" : "Start Live Conversation"} title={liveStatus !== 'idle' ? "End Live Conversation" : "Start Live Conversation"}>
                         <MicrophoneIcon />
                     </button>

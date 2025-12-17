@@ -2,8 +2,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Pose } from '../types';
 
-declare const Human: any;
-
 type HumanError = {
     error: string;
 };
@@ -119,7 +117,12 @@ export const usePoseDetection = () => {
 
             // Initialize Human library now that the video stream is active.
             if (!humanRef.current) {
-                humanRef.current = new Human(humanConfig);
+                // In browser distribution, Human constructor can be nested under the global Human object
+                const HumanClass = (window as any).Human?.Human || (window as any).Human;
+                if (typeof HumanClass !== 'function') {
+                    throw new Error("Human library not found or constructor is invalid.");
+                }
+                humanRef.current = new HumanClass(humanConfig);
                 await humanRef.current.load();
                 console.log("Human library loaded for pose detection.");
             }
@@ -135,8 +138,6 @@ export const usePoseDetection = () => {
             let message = "Camera access denied or unavailable.";
             if (err instanceof Error) {
                 message = err.message;
-            } else if (err && typeof err === 'object' && 'error' in err && typeof (err as any).error === 'string') {
-                message = (err as HumanError).error;
             }
             setError(message);
             setIsInitializing(false);
@@ -147,7 +148,7 @@ export const usePoseDetection = () => {
     useEffect(() => {
         return () => {
             stopDetection();
-            if(videoRef.current) {
+            if(videoRef.current && videoRef.current.parentNode) {
                  document.body.removeChild(videoRef.current);
                  videoRef.current = null;
             }

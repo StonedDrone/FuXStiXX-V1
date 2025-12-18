@@ -1,4 +1,3 @@
-
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Emotion } from '../types';
 
@@ -23,6 +22,7 @@ export const useEmotionDetection = () => {
     const [currentEmotion, setCurrentEmotion] = useState<Emotion | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [isInitializing, setIsInitializing] = useState(false);
+    const [isSyncing, setIsSyncing] = useState(false);
 
     const humanRef = useRef<any | null>(null);
     const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -35,19 +35,20 @@ export const useEmotionDetection = () => {
         try {
             const result = await humanRef.current.detect(videoRef.current);
             if (result.face && result.face.length > 0) {
+                setIsSyncing(true);
                 const face = result.face[0];
                 if (face.emotion && face.emotion.length > 0) {
-                    const dominantEmotion = face.emotion.reduce((prev: Emotion, current: Emotion) => 
-                        (prev.score > current.score) ? prev : current
-                    );
-                    setCurrentEmotion(dominantEmotion);
+                    // Sort to find the highest score emotion robustly
+                    const sortedEmotions = [...face.emotion].sort((a, b) => b.score - a.score);
+                    setCurrentEmotion(sortedEmotions[0]);
                 }
             } else {
+                 setIsSyncing(false);
                  setCurrentEmotion(null);
             }
         } catch (e) {
             console.error("Error in detection loop:", e);
-            setError("An error occurred during emotion analysis.");
+            setError("Bio-signal decoding interrupted.");
         } finally {
             animationFrameId.current = requestAnimationFrame(detectionLoop);
         }
@@ -66,28 +67,27 @@ export const useEmotionDetection = () => {
             videoRef.current.srcObject = null;
         }
         setIsDetecting(false);
+        setIsSyncing(false);
         setCurrentEmotion(null);
-        console.log("Emotion detection stopped.");
+        console.log("Bio-signal decoding stopped.");
     }, []);
 
     const startDetection = useCallback(async () => {
         if (isDetecting || isInitializing) return;
 
-        console.log("Initializing emotion detection...");
+        console.log("Initializing Bio-Signal Decoder...");
         setIsInitializing(true);
         setError(null);
         setCurrentEmotion(null);
 
         try {
-            // Get camera stream FIRST to ensure availability before loading the library.
             if (!navigator.mediaDevices?.getUserMedia) {
-                throw new Error("Camera not supported by your browser.");
+                throw new Error("Optical link not supported by this vessel.");
             }
             streamRef.current = await navigator.mediaDevices.getUserMedia({ 
                 video: { width: { ideal: 640 }, height: { ideal: 480 } } 
             });
 
-            // Set up hidden video element now that we have the stream.
             if (!videoRef.current) {
                 videoRef.current = document.createElement('video');
                 videoRef.current.style.display = 'none';
@@ -96,28 +96,25 @@ export const useEmotionDetection = () => {
             videoRef.current.srcObject = streamRef.current;
             await videoRef.current.play();
 
-            // Initialize Human library now that the video stream is active.
             if (!humanRef.current) {
-                // In browser distribution, Human constructor can be nested under the global Human object
                 const HumanClass = (window as any).Human?.Human || (window as any).Human;
                 if (typeof HumanClass !== 'function') {
-                    throw new Error("Human library not found or constructor is invalid.");
+                    throw new Error("Bio-decoder core libraries not found.");
                 }
                 humanRef.current = new HumanClass(humanConfig);
                 await humanRef.current.load();
-                console.log("Human library loaded.");
+                console.log("Bio-decoder core loaded.");
             }
             
             setIsDetecting(true);
             setIsInitializing(false);
-            console.log("Emotion detection started.");
+            console.log("Bio-signal decoding engaged.");
             
-            // Start the detection loop
             animationFrameId.current = requestAnimationFrame(detectionLoop);
 
         } catch (err) {
-            console.error("Failed to start emotion detection:", err);
-            let message = "Camera access denied or unavailable.";
+            console.error("Failed to engage bio-decoder:", err);
+            let message = "Optical link access denied.";
             if (err instanceof Error) {
                 message = err.message;
             }
@@ -127,7 +124,6 @@ export const useEmotionDetection = () => {
         }
     }, [isDetecting, isInitializing, detectionLoop, stopDetection]);
     
-    // Cleanup on unmount
     useEffect(() => {
         return () => {
             stopDetection();
@@ -138,5 +134,5 @@ export const useEmotionDetection = () => {
         }
     }, [stopDetection]);
 
-    return { isDetecting, isInitializing, currentEmotion, error, startDetection, stopDetection };
+    return { isDetecting, isInitializing, isSyncing, currentEmotion, error, startDetection, stopDetection };
 };

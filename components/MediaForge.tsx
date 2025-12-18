@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { QuickActionType, MEDIA_QUICK_ACTIONS } from './ChatInterface';
 import { XIcon } from './icons/XIcon';
@@ -40,7 +41,6 @@ const MediaForge: React.FC<MediaForgeProps> = ({ type, onClose, onExecute }) => 
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
             <div className="relative w-full max-w-2xl bg-layer-1 border-2 border-primary rounded-xl shadow-[0_0_40px_rgba(50,205,50,0.3)] overflow-hidden flex flex-col max-h-[80vh]">
                 
-                {/* Refraction Overlay */}
                 <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(0,0,0,0.4)_100%)]"></div>
                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/50 to-transparent animate-pulse"></div>
 
@@ -49,7 +49,9 @@ const MediaForge: React.FC<MediaForgeProps> = ({ type, onClose, onExecute }) => 
                         <span className="text-2xl">{action?.emoji}</span>
                         <div>
                             <h2 className="text-sm font-mono text-primary uppercase tracking-widest">{action?.name} Console</h2>
-                            <p className="text-[10px] font-mono text-secondary/60">SYNERGY PROTOCOL ACTIVE</p>
+                            <p className="text-[10px] font-mono text-secondary/60">
+                                {type === 'audio' ? 'SONIC SYNTHESIS ENGAGED' : 'SYNERGY PROTOCOL ACTIVE'}
+                            </p>
                         </div>
                     </div>
                     <button onClick={onClose} className="p-2 text-secondary hover:text-danger transition-colors">
@@ -59,13 +61,15 @@ const MediaForge: React.FC<MediaForgeProps> = ({ type, onClose, onExecute }) => 
 
                 <div className="relative p-6 space-y-4 flex-1 overflow-y-auto">
                     <div>
-                        <label className="block text-[10px] font-mono text-primary uppercase mb-2 tracking-tighter">Mission Objectives (Prompt)</label>
+                        <label className="block text-[10px] font-mono text-primary uppercase mb-2 tracking-tighter">
+                            {type === 'audio' ? 'Sonic Blueprint (Prompt)' : 'Mission Objectives (Prompt)'}
+                        </label>
                         <textarea
                             ref={inputRef}
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
                             onKeyDown={handleKeyPress}
-                            placeholder="Input target coordinates for synthesis..."
+                            placeholder={type === 'audio' ? "Describe the frequency... the vibe... the drone..." : "Input target coordinates for synthesis..."}
                             className="w-full h-32 bg-black/40 border border-primary/30 rounded-lg p-4 font-mono text-sm text-gray-200 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 resize-none placeholder:text-gray-600 shadow-inner"
                         />
                     </div>
@@ -88,6 +92,14 @@ const MediaForge: React.FC<MediaForgeProps> = ({ type, onClose, onExecute }) => 
                                     </button>
                                 ))}
                             </div>
+                        </div>
+                    )}
+
+                    {type === 'audio' && (
+                         <div className="p-4 bg-primary/5 border border-primary/10 rounded-lg">
+                            <p className="text-[10px] font-mono text-secondary/60 leading-relaxed italic">
+                                Note: FuXStiXX synthesizes audio using the Zephyr frequency. The output will be audio-reactive and ready for Vortex integration.
+                            </p>
                         </div>
                     )}
                 </div>

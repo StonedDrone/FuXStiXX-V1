@@ -5,6 +5,7 @@ import ChatInterface, { ChatInterfaceHandle } from './components/ChatInterface';
 import Codex from './components/Codex';
 import Playlist from './components/Playlist';
 import Settings from './components/Settings';
+import StudioOutput from './components/StudioOutput';
 import { UIStateProvider, useUIState } from './contexts/UIStateContext';
 import { ActiveModel } from './types';
 
@@ -15,30 +16,22 @@ const ThemedApp: React.FC = () => {
   const [isCodexOpen, setIsCodexOpen] = useState(false);
   const [isPlaylistOpen, setIsPlaylistOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [activeModel, setActiveModel] = useState<ActiveModel>({ type: 'gemini', modelId: 'gemini-2.5-flash' });
+  const [activeModel, setActiveModel] = useState<ActiveModel>({ type: 'gemini', modelId: 'gemini-3-flash-preview' });
   const [isTfReady, setIsTfReady] = useState(false);
   
-  const { theme } = useUIState();
+  const { theme, isStreamMode, isStudioMode } = useUIState();
   const chatInterfaceRef = useRef<ChatInterfaceHandle>(null);
 
   useEffect(() => {
-    // This effect synchronizes the React theme state with the DOM `data-theme` attribute
-    // on the body, which drives the CSS variable changes for theming.
     document.body.dataset.theme = theme;
   }, [theme]);
 
   useEffect(() => {
-    // This effect runs once on mount to initialize the TensorFlow.js backend.
-    // This resolves the "backend not initialized" warning and ensures AI vision
-    // features are ready to go without delay when activated.
     const initializeTfBackend = async () => {
       try {
         if (typeof tf !== 'undefined' && tf.ready) {
           await tf.ready();
-          console.log('TensorFlow.js backend initialized successfully.');
           setIsTfReady(true);
-        } else {
-          console.error("TensorFlow.js global object not found. It might not have loaded correctly.");
         }
       } catch (error) {
         console.error("Error initializing TensorFlow.js backend:", error);
@@ -60,14 +53,21 @@ const ThemedApp: React.FC = () => {
     setIsSettingsOpen(false);
   }, []);
 
+  // If in Studio Mode, render the clean output source only
+  if (isStudioMode) {
+    return <StudioOutput />;
+  }
+
   return (
     <div id="app-container" className="h-screen w-screen bg-base text-secondary flex flex-col font-sans antialiased overflow-hidden">
-      <Header
-        onCodexToggle={handleCodexToggle}
-        onPlaylistToggle={handlePlaylistToggle}
-        onSettingsToggle={handleSettingsToggle}
-        onClearChat={handleClearChat}
-      />
+      {!isStreamMode && (
+        <Header
+          onCodexToggle={handleCodexToggle}
+          onPlaylistToggle={handlePlaylistToggle}
+          onSettingsToggle={handleSettingsToggle}
+          onClearChat={handleClearChat}
+        />
+      )}
       <div className="flex-1 flex overflow-hidden">
         <main className="flex-1 flex flex-col">
           <ChatInterface 

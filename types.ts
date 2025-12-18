@@ -1,3 +1,4 @@
+
 import { Part } from "@google/genai";
 
 export type Sender = 'user' | 'ai';
@@ -5,6 +6,46 @@ export type Sender = 'user' | 'ai';
 export interface Attachment {
     name: string;
     type: string;
+}
+
+export interface GitCommit {
+    sha: string;
+    author: string;
+    date: string;
+    message: string;
+    url: string;
+    avatarUrl: string;
+}
+
+export interface GitBlameLine {
+    lineNumber: number;
+    author: string;
+    commitSha: string;
+    content: string;
+    date: string;
+}
+
+export interface RepoFile {
+    path: string;
+    type: 'blob' | 'tree';
+    size?: number;
+    url: string;
+}
+
+export interface DependencyData {
+    name: string;
+    version: string;
+    isDev?: boolean;
+}
+
+export interface GitData {
+    type: 'history' | 'blame' | 'structure' | 'dependencies';
+    repoName: string;
+    commits?: GitCommit[];
+    blame?: GitBlameLine[];
+    filePath?: string;
+    files?: RepoFile[];
+    dependencies?: DependencyData[];
 }
 
 export type HuggingFaceDataType = 'modelQuery' | 'modelSearch' | 'spaceInfo' | 'datasetSearch';
@@ -165,10 +206,14 @@ export interface HexDumpData {
 
 export interface VectorStatus {
     isOnline: boolean;
-    batteryLevel: number; // 0-100
-    wifiStrength: number; // 0-100
+    batteryLevel: number;
+    wifiStrength: number;
     isCharging: boolean;
     statusText: string;
+    headAngle: number; // Degrees
+    liftHeight: number; // mm
+    isPathing: boolean;
+    bridgeLatency: number; // ms
 }
 
 export interface PlaylistAnalysisData {
@@ -179,6 +224,11 @@ export interface PlaylistAnalysisData {
     genres: string[];
     topArtists: string[];
     trackCount: number;
+}
+
+export interface MapGroundingChunk {
+  title: string;
+  uri: string;
 }
 
 export interface Message {
@@ -206,6 +256,8 @@ export interface Message {
   hexDumpData?: HexDumpData;
   vectorStatus?: VectorStatus;
   playlistAnalysisData?: PlaylistAnalysisData;
+  gitData?: GitData;
+  mapsGrounding?: MapGroundingChunk[];
   isLiveStream?: boolean;
   isLiveSyncUpdate?: boolean;
 }

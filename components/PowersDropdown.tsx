@@ -24,55 +24,60 @@ const PowerSection: React.FC<{
   powers: Power[];
   onPowerClick: (prompt: string) => void;
 }> = ({ title, powers, onPowerClick }) => {
-  const [isHovered, setIsHovered] = useState<string | null>(null);
+  const [hoveredPower, setHoveredPower] = useState<string | null>(null);
 
   return (
     <div className="mb-4 last:mb-0">
       <h3 className="px-3 pt-2 pb-1.5 text-[9px] font-mono text-gray-500 uppercase tracking-[0.25em] border-b border-layer-3 mb-1">{title}</h3>
       <div className="space-y-0.5">
         {powers.map(power => (
-          <div key={power.name} className="relative group/power">
+          <div key={power.name} className="relative isolate">
             <button
                 onClick={() => onPowerClick(power.prompt)}
-                className="w-full text-left flex items-center px-3 py-2 rounded-md transition-all duration-200 text-sm group-hover/power:bg-primary/5"
-                onMouseEnter={() => setIsHovered(power.name)}
-                onMouseLeave={() => setIsHovered(null)}
+                className="group w-full text-left flex items-center px-3 py-2 rounded-md transition-all duration-200 text-sm hover:bg-primary/5"
+                onMouseEnter={() => setHoveredPower(power.name)}
+                onMouseLeave={() => setHoveredPower(null)}
             >
-                <span className="mr-3 text-lg flex-shrink-0">{power.emoji}</span>
+                <span className="mr-3 text-lg flex-shrink-0 group-hover:scale-110 transition-transform">{power.emoji}</span>
                 <span
                 className={`flex-1 truncate ${power.font}`}
                 style={{
-                    color: isHovered === power.name ? power.color : 'var(--color-secondary)',
-                    textShadow: isHovered === power.name ? `0 0 8px ${power.color}40` : 'none',
+                    color: hoveredPower === power.name ? power.color : 'var(--color-secondary)',
+                    textShadow: hoveredPower === power.name ? `0 0 8px ${power.color}40` : 'none',
                 }}
                 >
                 {power.name}
                 </span>
             </button>
             
-            {/* Enhanced Tooltip for Dropdown */}
-            <div className="absolute left-full ml-3 top-0 w-72 p-4 bg-layer-2 border border-primary/30 rounded-xl shadow-[0_0_40px_rgba(0,0,0,0.6)] opacity-0 group-hover/power:opacity-100 group-hover/power:translate-x-1 pointer-events-none transition-all duration-300 z-[110] backdrop-blur-2xl -translate-x-2 border-l-4">
-                <div className="relative">
-                    <div className="text-[9px] font-mono text-primary/50 uppercase tracking-widest mb-2 flex justify-between items-center">
-                        <span>Tactical Brief</span>
-                        <div className="flex space-x-1">
-                            <span className="w-1 h-1 bg-primary/40 rounded-full animate-ping"></span>
-                            <span className="w-1 h-1 bg-primary/40 rounded-full"></span>
+            {/* Tooltip pops out to the right of the dropdown */}
+            {hoveredPower === power.name && (
+                <div className="absolute left-[95%] top-0 ml-4 w-72 p-4 bg-layer-2 border border-primary/30 rounded-xl shadow-[0_0_40px_rgba(0,0,0,0.8)] z-[110] backdrop-blur-2xl animate-in fade-in slide-in-from-left-2 duration-200 pointer-events-none">
+                    <div className="relative">
+                        <div className="text-[9px] font-mono text-primary/50 uppercase tracking-widest mb-2 flex justify-between items-center border-b border-primary/10 pb-1">
+                            <span>Power_Specs</span>
+                            <div className="flex space-x-1">
+                                <span className="w-1 h-1 bg-primary/40 rounded-full animate-ping"></span>
+                                <span className="w-1 h-1 bg-primary/40 rounded-full"></span>
+                            </div>
                         </div>
-                    </div>
-                    <div className="text-sm text-secondary font-sans leading-snug mb-4">
-                        {power.description}
-                    </div>
-                    <div className="bg-black/40 p-2.5 rounded-lg border border-primary/10 shadow-inner">
-                        <div className="text-[8px] font-mono text-primary/40 uppercase mb-1">Execute:</div>
-                        <div className="text-[10px] font-mono text-primary/80 break-words font-medium">
-                            <span className="text-primary/20 mr-1.5">></span>{power.prompt}
+                        <div className="text-xs text-secondary font-sans leading-snug mb-4">
+                            {power.description}
                         </div>
+                        <div className="bg-black/60 p-2.5 rounded-lg border border-primary/10 shadow-inner">
+                            <div className="text-[8px] font-mono text-primary/40 uppercase mb-1">Execution_Prompt:</div>
+                            <div className="text-[10px] font-mono text-primary/80 break-words font-medium leading-tight">
+                                <span className="text-primary/20 mr-1.5">></span>{power.prompt}
+                            </div>
+                        </div>
+                        <div 
+                          className="absolute -bottom-1 -right-1 w-2 h-2 border-b border-r border-primary/40"
+                        ></div>
                     </div>
+                    {/* Connector triangle */}
+                    <div className="absolute top-4 -left-1.5 w-3 h-3 bg-layer-2 border-l border-b border-primary/30 rotate-45"></div>
                 </div>
-                {/* Connector triangle */}
-                <div className="absolute top-4 -left-1.5 w-3 h-3 bg-layer-2 border-l border-b border-primary/30 rotate-45"></div>
-            </div>
+            )}
           </div>
         ))}
       </div>

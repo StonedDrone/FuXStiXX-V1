@@ -1,3 +1,4 @@
+
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Emotion } from '../types';
 
@@ -29,6 +30,44 @@ export const useEmotionDetection = () => {
     const streamRef = useRef<MediaStream | null>(null);
     const animationFrameId = useRef<number | null>(null);
 
+    const initHuman = async () => {
+        if (humanRef.current) return humanRef.current;
+        const HumanClass = (window as any).Human?.Human || (window as any).Human;
+        if (typeof HumanClass !== 'function') {
+            throw new Error("Bio-decoder core libraries not found.");
+        }
+        const instance = new HumanClass(humanConfig);
+        await instance.load();
+        humanRef.current = instance;
+        return instance;
+    };
+
+    const analyzeImage = async (file: File): Promise<Emotion | null> => {
+        try {
+            const human = await initHuman();
+            const imageUrl = URL.createObjectURL(file);
+            const img = new Image();
+            img.src = imageUrl;
+            
+            await new Promise((resolve) => { img.onload = resolve; });
+            
+            const result = await human.detect(img);
+            URL.revokeObjectURL(imageUrl);
+
+            if (result.face && result.face.length > 0) {
+                const face = result.face[0];
+                if (face.emotion && face.emotion.length > 0) {
+                    const sorted = [...face.emotion].sort((a, b) => b.score - a.score);
+                    return sorted[0];
+                }
+            }
+            return null;
+        } catch (e) {
+            console.error("Static image bio-decode failed:", e);
+            return null;
+        }
+    };
+
     const detectionLoop = useCallback(async () => {
         if (!isDetecting || !humanRef.current || !videoRef.current) return;
 
@@ -38,7 +77,6 @@ export const useEmotionDetection = () => {
                 setIsSyncing(true);
                 const face = result.face[0];
                 if (face.emotion && face.emotion.length > 0) {
-                    // Sort to find the highest score emotion robustly
                     const sortedEmotions = [...face.emotion].sort((a, b) => b.score - a.score);
                     setCurrentEmotion(sortedEmotions[0]);
                 }
@@ -69,13 +107,11 @@ export const useEmotionDetection = () => {
         setIsDetecting(false);
         setIsSyncing(false);
         setCurrentEmotion(null);
-        console.log("Bio-signal decoding stopped.");
     }, []);
 
     const startDetection = useCallback(async () => {
         if (isDetecting || isInitializing) return;
 
-        console.log("Initializing Bio-Signal Decoder...");
         setIsInitializing(true);
         setError(null);
         setCurrentEmotion(null);
@@ -96,29 +132,15 @@ export const useEmotionDetection = () => {
             videoRef.current.srcObject = streamRef.current;
             await videoRef.current.play();
 
-            if (!humanRef.current) {
-                const HumanClass = (window as any).Human?.Human || (window as any).Human;
-                if (typeof HumanClass !== 'function') {
-                    throw new Error("Bio-decoder core libraries not found.");
-                }
-                humanRef.current = new HumanClass(humanConfig);
-                await humanRef.current.load();
-                console.log("Bio-decoder core loaded.");
-            }
+            await initHuman();
             
             setIsDetecting(true);
             setIsInitializing(false);
-            console.log("Bio-signal decoding engaged.");
-            
             animationFrameId.current = requestAnimationFrame(detectionLoop);
 
         } catch (err) {
             console.error("Failed to engage bio-decoder:", err);
-            let message = "Optical link access denied.";
-            if (err instanceof Error) {
-                message = err.message;
-            }
-            setError(message);
+            setError(err instanceof Error ? err.message : "Optical link access denied.");
             setIsInitializing(false);
             stopDetection();
         }
@@ -134,5 +156,14 @@ export const useEmotionDetection = () => {
         }
     }, [stopDetection]);
 
-    return { isDetecting, isInitializing, isSyncing, currentEmotion, error, startDetection, stopDetection };
+    return { 
+        isDetecting, 
+        isInitializing, 
+        isSyncing, 
+        currentEmotion, 
+        error, 
+        startDetection, 
+        stopDetection,
+        analyzeImage 
+    };
 };

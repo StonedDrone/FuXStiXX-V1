@@ -179,9 +179,13 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEditMedia, onAddTo
         {message.playlistAnalysisData && <PlaylistAnalysisView data={message.playlistAnalysisData} />}
         {message.hexDumpData && <HexView data={message.hexDumpData} />}
         {message.vectorStatus && <VectorStatusView data={message.vectorStatus} />}
-        {message.gitData && message.gitData.type === 'history' && <GitHistoryView data={message.gitData} />}
-        {message.gitData && message.gitData.type === 'blame' && <GitBlameView data={message.gitData} />}
-        {message.gitData && (message.gitData.type === 'structure' || message.gitData.type === 'dependencies') && <SystemScanView data={message.gitData} />}
+        {message.gitData && (
+          <div className="space-y-4">
+            {message.gitData.commits && <GitHistoryView data={message.gitData} />}
+            {message.gitData.blame && <GitBlameView data={message.gitData} />}
+            {(message.gitData.structure || message.gitData.dependencies) && <SystemScanView data={message.gitData} />}
+          </div>
+        )}
       </div>
     </div>
   );

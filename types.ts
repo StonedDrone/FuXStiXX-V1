@@ -39,13 +39,13 @@ export interface DependencyData {
 }
 
 export interface GitData {
-    type: 'history' | 'blame' | 'structure' | 'dependencies';
     repoName: string;
+    repoOwner: string;
     commits?: GitCommit[];
+    structure?: RepoFile[];
+    dependencies?: DependencyData[];
     blame?: GitBlameLine[];
     filePath?: string;
-    files?: RepoFile[];
-    dependencies?: DependencyData[];
 }
 
 export type HuggingFaceDataType = 'modelQuery' | 'modelSearch' | 'spaceInfo' | 'datasetSearch';

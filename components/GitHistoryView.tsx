@@ -15,6 +15,8 @@ const formatTimeAgo = (isoString: string) => {
 };
 
 const GitHistoryView: React.FC<{ data: GitData }> = ({ data }) => {
+    if (!data.commits || data.commits.length === 0) return null;
+    
     return (
         <div className="mt-3 border border-layer-3 rounded-xl bg-layer-2/30 overflow-hidden font-sans shadow-lg">
             <div className="p-3 bg-layer-2 border-b border-layer-3 flex items-center justify-between">
@@ -24,25 +26,28 @@ const GitHistoryView: React.FC<{ data: GitData }> = ({ data }) => {
                 </div>
                 <span className="text-[9px] font-mono text-primary/50">GIT_HUB_LIVE_SYNC</span>
             </div>
-            <div className="p-4 space-y-4">
-                {data.commits?.map((commit, i) => (
+            <div className="p-4 space-y-4 max-h-[400px] overflow-y-auto custom-scrollbar">
+                {data.commits.map((commit, i) => (
                     <div key={commit.sha} className="flex space-x-3 relative">
                         {i !== data.commits!.length - 1 && (
-                            <div className="absolute left-[15px] top-8 bottom-[-16px] w-0.5 bg-layer-3"></div>
+                            <div className="absolute left-[15px] top-8 bottom-[-16px] w-0.5 bg-layer-3/50"></div>
                         )}
-                        <img src={commit.avatarUrl} className="w-8 h-8 rounded-full border border-layer-3 z-10" alt={commit.author} />
+                        <img src={commit.avatarUrl} className="w-8 h-8 rounded-full border border-layer-3 z-10 bg-layer-1" alt={commit.author} />
                         <div className="flex-1 min-w-0">
                             <div className="flex justify-between items-start">
                                 <p className="text-xs font-bold text-secondary truncate">{commit.author}</p>
                                 <span className="text-[9px] font-mono text-gray-500 whitespace-nowrap ml-2">{formatTimeAgo(commit.date)}</span>
                             </div>
-                            <p className="text-sm text-gray-300 line-clamp-2 mt-0.5">{commit.message}</p>
+                            <p className="text-sm text-gray-300 line-clamp-2 mt-0.5 leading-tight">{commit.message}</p>
                             <a href={commit.url} target="_blank" rel="noopener noreferrer" className="text-[9px] font-mono text-primary/60 hover:text-primary transition-colors mt-1 block">
                                 {commit.sha.substring(0, 7)} ->
                             </a>
                         </div>
                     </div>
                 ))}
+            </div>
+            <div className="p-2 bg-primary/5 text-[8px] text-center text-primary/40 uppercase tracking-tighter border-t border-primary/10">
+                Temporal Log Sync Successful
             </div>
         </div>
     );

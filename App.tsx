@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import Header from './components/Header';
 import ChatInterface, { ChatInterfaceHandle } from './components/ChatInterface';
@@ -7,10 +6,16 @@ import Playlist from './components/Playlist';
 import Settings from './components/Settings';
 import StudioOutput from './components/StudioOutput';
 import { UIStateProvider, useUIState } from './contexts/UIStateContext';
-import { ActiveModel } from './types';
+import { ActiveModel, Message } from './types';
 
 // Since tf is loaded from a script tag in index.html, we declare it as a global
 declare const tf: any;
+
+const INITIAL_MESSAGE: Message = {
+    id: 'init',
+    text: 'FuXStiXX online. I am your co-pilot, Captain. Ready to progress the Mission. How may I assist?',
+    sender: 'ai',
+};
 
 const ThemedApp: React.FC = () => {
   const [isCodexOpen, setIsCodexOpen] = useState(false);
@@ -19,6 +24,21 @@ const ThemedApp: React.FC = () => {
   const [activeModel, setActiveModel] = useState<ActiveModel>({ type: 'gemini', modelId: 'gemini-3-flash-preview' });
   const [isTfReady, setIsTfReady] = useState(false);
   
+  // Shared chat state for streaming output
+  const [messages, setMessages] = useState<Message[]>(() => {
+      try {
+        const savedMessages = localStorage.getItem('fuxstixx-chat-history');
+        if (savedMessages) {
+          const parsed = JSON.parse(savedMessages);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+        return [INITIAL_MESSAGE];
+      } catch (error) {
+        console.error("Failed to parse chat history from localStorage", error);
+        return [INITIAL_MESSAGE];
+      }
+  });
+
   const { theme, isStreamMode, isStudioMode } = useUIState();
   const chatInterfaceRef = useRef<ChatInterfaceHandle>(null);
 
@@ -45,6 +65,7 @@ const ThemedApp: React.FC = () => {
   const handleSettingsToggle = useCallback(() => setIsSettingsOpen(prev => !prev), []);
 
   const handleClearChat = useCallback(() => {
+    setMessages([INITIAL_MESSAGE]);
     chatInterfaceRef.current?.clearChat();
   }, []);
 
@@ -55,7 +76,7 @@ const ThemedApp: React.FC = () => {
 
   // If in Studio Mode, render the clean output source only
   if (isStudioMode) {
-    return <StudioOutput />;
+    return <StudioOutput messages={messages} />;
   }
 
   return (
@@ -75,6 +96,8 @@ const ThemedApp: React.FC = () => {
             activeModel={activeModel}
             setActiveModel={setActiveModel}
             isTfReady={isTfReady}
+            messages={messages}
+            setMessages={setMessages}
           />
         </main>
       </div>

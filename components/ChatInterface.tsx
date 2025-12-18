@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { GoogleGenAI, Blob as GeminiBlob, LiveServerMessage, Modality } from "@google/genai";
 import { Message, Attachment, ActiveModel, DAG, LiveStreamState, HexDumpData, Track, MapGroundingChunk } from '../types';
@@ -229,6 +228,41 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     setHudOps(prev => ({ ...prev, chaos: isChaos }));
   }, [theme]);
 
+  // Persistent Vision Mode Stream management
+  useEffect(() => {
+    let currentStream: MediaStream | null = null;
+
+    const startVision = async () => {
+      try {
+        currentStream = await navigator.mediaDevices.getUserMedia({ 
+            video: { width: { ideal: 640 }, height: { ideal: 480 } } 
+        });
+        setVisionStream(currentStream);
+        if (pipVideoRef.current) {
+            pipVideoRef.current.srcObject = currentStream;
+        }
+      } catch (err) {
+        console.error("Failed to start vision stream:", err);
+        setIsVisionModeEnabled(false);
+      }
+    };
+
+    if (isVisionModeEnabled) {
+      startVision();
+    } else {
+      if (visionStream) {
+        visionStream.getTracks().forEach(track => track.stop());
+        setVisionStream(null);
+      }
+    }
+
+    return () => {
+      if (currentStream) {
+        currentStream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [isVisionModeEnabled]);
+
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
@@ -246,6 +280,79 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     const utterance = new SpeechSynthesisUtterance(text.replace(/[#*`]/g, ''));
     window.speechSynthesis.speak(utterance);
   }, []);
+
+  const stopLiveConversation = useCallback(async () => {
+    if (liveSessionPromiseRef.current) {
+        try {
+            const session = await liveSessionPromiseRef.current;
+            session.close();
+        } catch (e) { console.error('Error closing live session:', e); }
+        liveSessionPromiseRef.current = null;
+    }
+
+    if (audioResourcesRef.current) {
+        audioResourcesRef.current.stream?.getTracks().forEach(track => track.stop());
+        audioResourcesRef.current.scriptProcessor?.disconnect();
+        audioResourcesRef.current.inputAudioContext?.close();
+        audioResourcesRef.current.outputAudioContext?.close();
+        audioResourcesRef.current = null;
+    }
+    setLiveStatus('idle');
+  }, []);
+
+  const startLiveConversation = useCallback(async () => {
+    setLiveStatus('connecting');
+    try {
+      const ai = new GoogleGenAI({apiKey: process.env.API_KEY!});
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const inputAudioContext = new AudioContext({ sampleRate: 16000 });
+      const outputAudioContext = new AudioContext({ sampleRate: 24000 });
+      const scriptProcessor = inputAudioContext.createScriptProcessor(4096, 1, 1);
+      
+      audioResourcesRef.current = { stream, inputAudioContext, outputAudioContext, scriptProcessor, sources: new Set(), nextStartTime: 0, videoStream: null, frameInterval: null };
+      
+      liveSessionPromiseRef.current = ai.live.connect({
+          model: 'gemini-2.5-flash-native-audio-preview-09-2025',
+          callbacks: {
+              onopen: () => setLiveStatus('active'),
+              onmessage: async (message: LiveServerMessage) => {
+                // Audio response logic
+                const base64EncodedAudioString = message.serverContent?.modelTurn?.parts[0]?.inlineData.data;
+                if (base64EncodedAudioString && audioResourcesRef.current) {
+                    let res = audioResourcesRef.current;
+                    res.nextStartTime = Math.max(res.nextStartTime, res.outputAudioContext.currentTime);
+                    const audioBuffer = await decodeAudioData(decode(base64EncodedAudioString), res.outputAudioContext, 24000, 1);
+                    const source = res.outputAudioContext.createBufferSource();
+                    source.buffer = audioBuffer;
+                    source.connect(res.outputAudioContext.destination);
+                    source.start(res.nextStartTime);
+                    res.nextStartTime += audioBuffer.duration;
+                    res.sources.add(source);
+                }
+              },
+              onerror: (e) => setLiveStatus('error'),
+              onclose: () => setLiveStatus('idle'),
+          },
+          config: {
+              responseModalities: [Modality.AUDIO],
+              systemInstruction: AI_PERSONA_INSTRUCTION,
+          },
+      });
+    } catch (error) {
+        setLiveStatus('error');
+    }
+  }, []);
+
+  const parseCommand = (commandString: string): { command: string, params: Record<string, string> } => {
+    const parts = commandString.split('|').map(p => p.trim());
+    const command = parts[0];
+    const params: Record<string, string> = {};
+    parts.slice(1).forEach(part => {
+        const [key, ...valueParts] = part.split(':');
+        if (key && valueParts.length > 0) params[key.trim().toLowerCase()] = valueParts.join(':').trim();
+    });
+    return { command, params };
+  };
 
   const handleSend = useCallback(async (explicitInput?: string) => {
     const userMessageText = explicitInput || input;
@@ -374,6 +481,20 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
         />
       )}
 
+      {/* Persistent PiP Vision Feed */}
+      {isVisionModeEnabled && (
+        <div className="absolute bottom-24 right-8 w-48 aspect-video bg-black border-2 border-primary rounded-lg overflow-hidden z-10 shadow-lg shadow-primary/20 animate-in fade-in zoom-in duration-300">
+            <video ref={pipVideoRef} autoPlay playsInline muted className="w-full h-full object-cover opacity-80" />
+            <canvas ref={pipCanvasRef} className="hidden" />
+            <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-primary/20 backdrop-blur-sm rounded text-[8px] font-mono text-primary uppercase tracking-tighter border border-primary/20">
+                Vision_Link_Active
+            </div>
+            <div className="absolute bottom-1 right-1 px-1 py-0.5 bg-black/40 rounded text-[6px] font-mono text-secondary/60">
+                720p // CV_READY
+            </div>
+        </div>
+      )}
+
       <div className="absolute top-20 right-8 z-10 pointer-events-none sm:pointer-events-auto">
         <MagicMirrorBox 
             analyser={globalAnalyser} 
@@ -397,17 +518,36 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
           <div className="relative flex items-center">
               <button
                   ref={powersButtonRef} onClick={() => setIsPowersOpen(!isPowersOpen)}
-                  className="p-2 mr-2 rounded-full bg-layer-1 text-secondary hover:text-primary"
+                  className="p-2 mr-2 rounded-full bg-layer-1 text-secondary hover:text-primary transition-colors"
               > <ZapIcon /> </button>
               <textarea 
                   ref={textAreaRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyPress={handleKeyPress}
                   placeholder="Command the Chaos Engine..."
-                  className="w-full bg-layer-1 border border-layer-3 rounded-lg p-3 pr-[120px] text-gray-200 focus:outline-none focus:ring-1 focus:ring-primary font-mono text-sm"
+                  className="w-full bg-layer-1 border border-layer-3 rounded-lg p-3 pr-[160px] text-gray-200 focus:outline-none focus:ring-1 focus:ring-primary font-mono text-sm"
                   rows={1} 
               />
-              <div className="absolute right-3 flex items-center space-x-2">
-                  <button onClick={() => setIsCameraOpen(true)} className="p-2 text-secondary hover:text-primary"><CameraIcon /></button>
-                  <button onClick={() => handleSend()} className="p-2 bg-primary text-black rounded-lg hover:scale-105 transition-transform"><SendIcon /></button>
+              <div className="absolute right-3 flex items-center space-x-1">
+                  <button 
+                    onClick={() => setIsVisionModeEnabled(!isVisionModeEnabled)} 
+                    className={`p-2 transition-all duration-300 rounded-lg ${isVisionModeEnabled ? 'text-primary bg-primary/10 shadow-[0_0_10px_rgba(50,205,50,0.3)]' : 'text-secondary hover:text-primary'}`}
+                    title={isVisionModeEnabled ? "Disable Continuous Vision" : "Enable Continuous Vision"}
+                  >
+                    <VideoCameraIcon />
+                  </button>
+                  <button 
+                    onClick={() => setIsCameraOpen(true)} 
+                    className="p-2 text-secondary hover:text-primary"
+                    title="Capture Snapshot"
+                  >
+                    <CameraIcon />
+                  </button>
+                  <button 
+                    onClick={() => handleSend()} 
+                    className="p-2 bg-primary text-black rounded-lg hover:scale-105 transition-transform"
+                    title="Transmit Message"
+                  >
+                    <SendIcon />
+                  </button>
               </div>
               {isPowersOpen && <PowersDropdown onPowerClick={(p) => { setInput(p); setIsPowersOpen(false); }} onClose={() => setIsPowersOpen(false)} />}
           </div>

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 import { useUIState } from '../contexts/UIStateContext';
 import { Emotion } from '../types';
 import { DroneOpIcon } from './icons/DroneOpIcon';
@@ -37,6 +38,7 @@ const HUDOverlay: React.FC<HUDOverlayProps> = ({
 }) => {
     const [hexLogs, setHexLogs] = useState<string[]>([]);
     const [engineLoad, setEngineLoad] = useState(12);
+    const [compassPos, setCompassPos] = useState(0);
     const { isStreamMode, setIsStreamMode } = useUIState();
 
     useEffect(() => {
@@ -59,122 +61,211 @@ const HUDOverlay: React.FC<HUDOverlayProps> = ({
             
             setEngineLoad(prev => {
                 const target = isLoading ? 70 : 12;
-                return prev + (target - prev) * 0.1 + (Math.random() * 5 - 2.5);
+                const jitter = isLoading ? (Math.random() * 15 - 7.5) : (Math.random() * 4 - 2);
+                return Math.max(0, Math.min(100, prev + (target - prev) * 0.05 + jitter));
             });
-        }, 150);
+
+            setCompassPos(prev => (prev + (isLoading ? 10 : 2)) % 360);
+        }, 120);
         return () => clearInterval(interval);
     }, [isLoading, currentEmotion]);
 
     const activeBioColor = currentEmotion ? EMOTION_COLORS[currentEmotion.emotion.toLowerCase()] || 'var(--color-primary)' : 'var(--color-primary)';
 
     return (
-        <div className={`fixed inset-0 pointer-events-none z-0 transition-opacity duration-1000 ${activeForge ? 'opacity-30' : 'opacity-100'}`}>
+        <div className={`fixed inset-0 pointer-events-none z-0 transition-all duration-1000 ${activeForge ? 'opacity-20 scale-105' : 'opacity-100 scale-100'}`}>
+            {/* Background Grid System */}
+            <div className="absolute inset-0 opacity-[0.03] pointer-events-none overflow-hidden">
+                <div 
+                    className="absolute inset-[-100%] border-primary/20"
+                    style={{
+                        backgroundImage: `linear-gradient(to right, var(--color-primary) 1px, transparent 1px), linear-gradient(to bottom, var(--color-primary) 1px, transparent 1px)`,
+                        backgroundSize: '40px 40px',
+                        transform: `perspective(1000px) rotateX(60deg) translateY(${compassPos % 40}px)`,
+                        transition: 'transform 0.1s linear'
+                    }}
+                ></div>
+            </div>
+
+            {/* Neural Compass - Top Center */}
+            <div className="absolute top-12 left-1/2 -translate-x-1/2 flex flex-col items-center">
+                <div className="w-64 h-1 border-b border-primary/20 relative overflow-hidden">
+                    <div 
+                        className="flex space-x-8 absolute top-0 transition-transform duration-150"
+                        style={{ transform: `translateX(-${compassPos}px)` }}
+                    >
+                        {Array.from({ length: 20 }).map((_, i) => (
+                            <span key={i} className="text-[6px] font-mono text-primary/40 whitespace-nowrap">{(i * 10) % 360}°</span>
+                        ))}
+                    </div>
+                </div>
+                <div className="w-1 h-3 bg-primary/60 mt-[-1px] z-10"></div>
+            </div>
+
             {/* Top Engine Status */}
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[85%] h-12 bg-primary/5 border-b border-x border-primary/20 rounded-b-xl flex items-center justify-around px-8 backdrop-blur-[2px]">
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[90%] h-14 bg-gradient-to-b from-primary/10 to-transparent border-x border-primary/10 rounded-b-3xl flex items-center justify-around px-8 backdrop-blur-[1px]">
                 <div className="flex flex-col items-center">
-                    <span className="text-[8px] font-mono text-primary/60 uppercase tracking-widest">Chaos Load</span>
-                    <div className="w-20 h-1 bg-layer-3 mt-1 rounded-full overflow-hidden">
+                    <span className="text-[7px] font-mono text-primary/40 uppercase tracking-[0.3em]">Load_Density</span>
+                    <div className="w-24 h-0.5 bg-layer-3 mt-1.5 rounded-full overflow-hidden relative">
                         <div 
-                            className="h-full bg-primary shadow-[0_0_8px_var(--color-primary)] transition-all duration-300"
-                            style={{ width: `${Math.min(engineLoad, 100)}%` }}
+                            className={`h-full bg-primary shadow-[0_0_10px_var(--color-primary)] transition-all duration-500 ${isLoading ? 'animate-pulse' : ''}`}
+                            style={{ width: `${engineLoad}%` }}
                         ></div>
+                        {isLoading && (
+                            <div className="absolute inset-0 bg-white/20 animate-data-stream"></div>
+                        )}
                     </div>
                 </div>
                 
                 {/* Bio-Telemetry Module */}
-                <div className="flex flex-col items-center px-4 border-x border-primary/10">
-                    <span className="text-[8px] font-mono text-primary/60 uppercase tracking-widest">Bio-Sync</span>
-                    <div className="flex items-center space-x-2">
-                         <div className={`w-1.5 h-1.5 rounded-full ${isBioSyncing ? 'animate-ping' : ''}`} style={{ backgroundColor: activeBioColor }}></div>
-                         <span className="text-[10px] font-mono uppercase tracking-tighter" style={{ color: activeBioColor }}>
-                            {currentEmotion ? `${currentEmotion.emotion} [${(currentEmotion.score * 100).toFixed(0)}%]` : isBioSyncing ? 'DECODING...' : 'WAITING'}
+                <div className="flex flex-col items-center px-6 border-x border-primary/5">
+                    <span className="text-[7px] font-mono text-primary/40 uppercase tracking-[0.3em]">Synapse_Gap</span>
+                    <div className="flex items-center space-x-2 mt-1">
+                         <div className={`w-2 h-2 rounded-full ${isBioSyncing ? 'animate-ping' : ''}`} style={{ backgroundColor: activeBioColor }}></div>
+                         <span className="text-[9px] font-mono font-bold tracking-tight" style={{ color: activeBioColor }}>
+                            {currentEmotion ? `${currentEmotion.emotion.toUpperCase()}` : isBioSyncing ? 'BUFFERING...' : 'IDLE'}
                          </span>
                     </div>
                 </div>
 
                 <div className="flex flex-col items-center">
-                    <span className="text-[8px] font-mono text-primary/60 uppercase tracking-widest">Drone Link</span>
-                    <div className="flex items-center space-x-1">
-                        <span className="w-1.5 h-1.5 bg-success rounded-full animate-pulse"></span>
-                        <span className="text-[10px] font-mono text-success uppercase tracking-tighter">Connected</span>
+                    <span className="text-[7px] font-mono text-primary/40 uppercase tracking-[0.3em]">Node_Bridge</span>
+                    <div className="flex items-center space-x-1 mt-1">
+                        <div className="w-1.5 h-1.5 bg-success rounded-sm animate-pulse"></div>
+                        <span className="text-[9px] font-mono text-success/80 uppercase">Established</span>
                     </div>
                 </div>
 
                 <div className="flex flex-col items-center">
-                    <span className="text-[8px] font-mono text-primary/60 uppercase tracking-widest">Core Status</span>
-                    <span className={`text-[10px] font-mono ${isLoading ? 'text-primary animate-pulse' : 'text-primary/80'}`}>
-                        {isLoading ? 'EXECUTING CYCLE' : 'STANDBY'}
+                    <span className="text-[7px] font-mono text-primary/40 uppercase tracking-[0.3em]">Core_Flux</span>
+                    <span className={`text-[9px] font-mono mt-1 ${isLoading ? 'text-primary animate-pulse' : 'text-primary/60'}`}>
+                        {isLoading ? '0x' + Math.floor(Math.random() * 1000000).toString(16) : 'STABLE_0x0'}
                     </span>
                 </div>
 
                 <div className="flex flex-col items-center space-y-1">
-                    <span className="text-[8px] font-mono text-primary/60 uppercase tracking-widest">Stream Link</span>
                     <button 
                         onClick={() => setIsStreamMode(!isStreamMode)}
-                        className={`pointer-events-auto px-2 py-0.5 rounded border text-[8px] font-mono transition-all duration-300 ${
+                        className={`pointer-events-auto px-3 py-0.5 rounded-sm border text-[7px] font-mono transition-all duration-500 uppercase tracking-widest ${
                             isStreamMode 
-                            ? 'bg-danger text-white border-danger animate-pulse shadow-[0_0_10px_#f85149]' 
-                            : 'bg-primary/10 text-primary border-primary/30 hover:bg-primary/20'
+                            ? 'bg-danger text-white border-danger animate-pulse shadow-[0_0_15px_#f85149]' 
+                            : 'bg-primary/5 text-primary border-primary/20 hover:bg-primary/20'
                         }`}
                     >
-                        {isStreamMode ? 'LIVE BROADCAST' : 'GO LIVE'}
+                        {isStreamMode ? 'BROADCAST_ON' : 'STREAM_OFFLINE'}
                     </button>
                 </div>
             </div>
 
             {/* Left Log Stream and Operational Icons */}
-            <div className="absolute left-4 top-24 bottom-24 w-24 flex flex-col">
-                {/* Contextual Operational Icons */}
-                <div className="flex flex-col items-start space-y-4 mb-8">
+            <div className="absolute left-6 top-24 bottom-24 w-28 flex flex-col">
+                <div className="flex flex-col items-start space-y-6 mb-12">
                     {activeChaosEngine && (
-                        <div className="flex items-center space-x-2 text-primary animate-in fade-in slide-in-from-left-2 duration-500">
-                            <ChaosIcon className="w-6 h-6" />
-                            <span className="text-[8px] font-mono uppercase tracking-tighter">Chaos_Eng</span>
+                        <div className="flex items-center space-x-3 text-primary animate-in fade-in slide-in-from-left-4 duration-700">
+                            <ChaosIcon className="w-8 h-8 opacity-70" />
+                            <div className="flex flex-col">
+                                <span className="text-[8px] font-mono uppercase tracking-[0.2em] text-primary/80">Entropy_Eng</span>
+                                <span className="text-[6px] font-mono text-primary/40">V.4.2_SYSPER</span>
+                            </div>
                         </div>
                     )}
                     {activeDataTransfer && (
-                        <div className="flex items-center space-x-2 text-primary animate-in fade-in slide-in-from-left-2 duration-500">
-                            <DataTransferIcon className="w-6 h-6" />
-                            <span className="text-[8px] font-mono uppercase tracking-tighter">Data_Flux</span>
-                        </div>
-                    )}
-                    {activeDroneOp && (
-                        <div className="flex items-center space-x-2 text-primary animate-in fade-in slide-in-from-left-2 duration-500">
-                            <DroneOpIcon className="w-6 h-6" />
-                            <span className="text-[8px] font-mono uppercase tracking-tighter">Drone_Ops</span>
+                        <div className="flex items-center space-x-3 text-primary animate-in fade-in slide-in-from-left-4 duration-700">
+                            <DataTransferIcon className="w-8 h-8 opacity-70" />
+                            <div className="flex flex-col">
+                                <span className="text-[8px] font-mono uppercase tracking-[0.2em] text-primary/80">Packet_Flux</span>
+                                <span className="text-[6px] font-mono text-primary/40">UPLINK_82%</span>
+                            </div>
                         </div>
                     )}
                 </div>
 
-                <div className="flex-1 overflow-hidden flex flex-col items-start space-y-1 opacity-40">
+                <div className="flex-1 overflow-hidden flex flex-col items-start space-y-1.5 opacity-30 select-none">
+                    <div className="text-[6px] text-primary/40 uppercase tracking-widest border-b border-primary/10 w-full mb-1 pb-0.5">Kernel_Log</div>
                     {hexLogs.map((log, i) => (
-                        <span key={i} className="text-[8px] font-mono text-primary tracking-tighter transition-all duration-500 whitespace-nowrap" style={{ opacity: 1 - (i * 0.05) }}>
+                        <span key={i} className="text-[7px] font-mono text-primary/90 tracking-tighter transition-all duration-700 whitespace-nowrap" style={{ opacity: 1 - (i * 0.05) }}>
                             {log}
                         </span>
                     ))}
                 </div>
             </div>
 
-            {/* Corner Bracket Borders - React to Bio-Signal */}
-            <div className="absolute top-4 left-4 w-8 h-8 border-t-2 border-l-2 rounded-tl-lg transition-colors duration-500" style={{ borderColor: `${activeBioColor}66` }}></div>
-            <div className="absolute top-4 right-4 w-8 h-8 border-t-2 border-r-2 rounded-tr-lg transition-colors duration-500" style={{ borderColor: `${activeBioColor}66` }}></div>
-            <div className="absolute bottom-4 left-4 w-8 h-8 border-b-2 border-l-2 rounded-bl-lg transition-colors duration-500" style={{ borderColor: `${activeBioColor}66` }}></div>
-            <div className="absolute bottom-4 right-4 w-8 h-8 border-b-2 border-r-2 rounded-br-lg transition-colors duration-500" style={{ borderColor: `${activeBioColor}66` }}></div>
+            {/* Bottom Left: Encryption Ticker */}
+            <div className="absolute bottom-12 left-8 opacity-40">
+                <div className="text-[6px] font-mono text-primary/40 uppercase tracking-[0.5em] mb-1">Enc_Bridge_Sig</div>
+                <div className="text-[9px] font-mono text-primary leading-none">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                        <div key={i}>{Math.random().toString(16).substring(2, 20)}</div>
+                    ))}
+                </div>
+            </div>
 
-            {/* Liquid Background Pulse */}
-            <div className={`absolute inset-0 bg-primary/2 transition-opacity duration-500 ${isLoading ? 'opacity-10' : 'opacity-0'}`}></div>
+            {/* Bottom Right: Vortex Stability Radial */}
+            <div className="absolute bottom-12 right-8 flex flex-col items-end">
+                <div className="relative w-16 h-16 mb-2">
+                    <svg viewBox="0 0 100 100" className={`w-full h-full transform -rotate-90 transition-all duration-500 ${isLoading ? 'opacity-80' : 'opacity-30'}`}>
+                        <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" strokeWidth="2" className="text-primary/10" />
+                        <circle 
+                            cx="50" cy="50" r="45" fill="none" stroke="currentColor" strokeWidth="4" 
+                            className="text-primary"
+                            strokeDasharray={`${Math.min(100, engineLoad * 2.8)}, 283`}
+                            style={{ transition: 'stroke-dasharray 0.5s ease-out' }}
+                        />
+                    </svg>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="text-[8px] font-mono text-primary">{Math.round(100 - engineLoad)}%</span>
+                    </div>
+                </div>
+                <span className="text-[7px] font-mono text-primary/40 uppercase tracking-[0.2em]">Stability_Index</span>
+            </div>
+
+            {/* Corner Bracket Borders - Dynamic Expansion */}
+            <div 
+                className={`absolute top-6 left-6 w-12 h-12 border-t-2 border-l-2 rounded-tl-xl transition-all duration-700`} 
+                style={{ 
+                    borderColor: `${activeBioColor}44`,
+                    transform: isLoading ? 'translate(-4px, -4px)' : 'translate(0, 0)'
+                }}
+            ></div>
+            <div 
+                className={`absolute top-6 right-6 w-12 h-12 border-t-2 border-r-2 rounded-tr-xl transition-all duration-700`} 
+                style={{ 
+                    borderColor: `${activeBioColor}44`,
+                    transform: isLoading ? 'translate(4px, -4px)' : 'translate(0, 0)'
+                }}
+            ></div>
+            <div 
+                className={`absolute bottom-6 left-6 w-12 h-12 border-b-2 border-l-2 rounded-bl-xl transition-all duration-700`} 
+                style={{ 
+                    borderColor: `${activeBioColor}44`,
+                    transform: isLoading ? 'translate(-4px, 4px)' : 'translate(0, 0)'
+                }}
+            ></div>
+            <div 
+                className={`absolute bottom-6 right-6 w-12 h-12 border-b-2 border-r-2 rounded-br-xl transition-all duration-700`} 
+                style={{ 
+                    borderColor: `${activeBioColor}44`,
+                    transform: isLoading ? 'translate(4px, 4px)' : 'translate(0, 0)'
+                }}
+            ></div>
+
+            {/* Scanline & Grain Overlays */}
+            <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.05)_50%)] bg-[length:100%_2px] pointer-events-none opacity-40"></div>
+            {isLoading && (
+                <div className="absolute inset-0 bg-primary/2 mix-blend-overlay animate-glitch pointer-events-none opacity-30"></div>
+            )}
             
-            {/* Scanline Effect */}
-            <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%)] bg-[length:100%_4px] pointer-events-none opacity-20"></div>
+            {/* Syncing Vignette */}
+            <div className={`absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_40%,rgba(0,0,0,0.4)_100%)] transition-opacity duration-1000 ${isLoading ? 'opacity-100' : 'opacity-0'}`}></div>
 
             {/* Exit Stream Mode Hint */}
             {isStreamMode && (
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-auto group">
+                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 pointer-events-auto group">
                     <button 
                         onClick={() => setIsStreamMode(false)}
-                        className="bg-black/60 border border-primary/20 text-[8px] font-mono text-primary/40 px-3 py-1 rounded-full hover:text-primary hover:border-primary transition-all uppercase tracking-tighter"
+                        className="bg-primary/5 hover:bg-primary/10 border border-primary/20 text-[7px] font-mono text-primary/60 px-4 py-1.5 rounded-sm transition-all uppercase tracking-[0.3em] hover:text-primary"
                     >
-                        Return to Deck [ESC]
+                        Abort_Stream_Broadcast
                     </button>
                 </div>
             )}

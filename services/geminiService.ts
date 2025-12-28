@@ -1,52 +1,20 @@
 
-import { GoogleGenAI, Part, Content, Modality, Type, FunctionDeclaration, GenerateContentResponse } from "@google/genai";
+import { GoogleGenAI, Part, Content, Modality, Type, FunctionDeclaration, GenerateContentResponse, LiveServerMessage } from "@google/genai";
 import { AI_PERSONA_INSTRUCTION } from '../constants';
-import { Message, UserSimulationData, PlaylistAnalysisData, MapGroundingChunk, GitData } from '../types';
-import * as gitService from './gitService';
-import * as workflowService from './workflowService';
-import * as knowledgeService from './knowledgeService';
-import * as vectorService from './vectorDroneService';
+import { Message } from '../types';
 
-const API_KEY = process.env.API_KEY;
-if (!API_KEY) throw new Error("API_KEY environment variable not set");
-
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+// Note: GoogleGenAI instance should be created fresh to ensure latest Key from dialog if used
+const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // --- Tool Definitions ---
 const toolDeclarations: FunctionDeclaration[] = [
   {
-    name: 'git_scout',
+    name: 'live_sync_op',
     parameters: {
       type: Type.OBJECT,
-      description: 'Analyze a GitHub repository history, structure, or dependencies.',
+      description: 'Manage real-time synchronization with the codebase.',
       properties: {
-        operation: { type: Type.STRING, enum: ['scout_repo', 'blame_file', 'history_log'], description: 'Type of git analysis' },
-        url: { type: Type.STRING, description: 'GitHub URL if applicable' },
-        path: { type: Type.STRING, description: 'File path for blame' }
-      },
-      required: ['operation']
-    }
-  },
-  {
-    name: 'knowledge_op',
-    parameters: {
-      type: Type.OBJECT,
-      description: 'Interact with the long-term indexed intelligence base.',
-      properties: {
-        action: { type: Type.STRING, enum: ['query', 'status', 'purge'], description: 'Intelligence operation' },
-        query: { type: Type.STRING, description: 'The question for the knowledge base' }
-      },
-      required: ['action']
-    }
-  },
-  {
-    name: 'automation_op',
-    parameters: {
-      type: Type.OBJECT,
-      description: 'Manage Directed Acyclic Graphs (DAGs) for workflow automation.',
-      properties: {
-        action: { type: Type.STRING, enum: ['status', 'trigger', 'clear'], description: 'DAG action' },
-        name: { type: Type.STRING, description: 'Name of the DAG' }
+        action: { type: Type.STRING, enum: ['engage', 'disengage', 'status'], description: 'Sync command' }
       },
       required: ['action']
     }
@@ -63,35 +31,42 @@ const toolDeclarations: FunctionDeclaration[] = [
       },
       required: ['action']
     }
-  },
-  {
-    name: 'financial_scout',
-    parameters: {
-      type: Type.OBJECT,
-      description: 'Scan financial markets for stock, crypto, or quant intel.',
-      properties: {
-        type: { type: Type.STRING, enum: ['stock', 'crypto', 'quant', 'news'], description: 'Asset type' },
-        ticker: { type: Type.STRING, description: 'Ticker symbol (e.g. BTC, AAPL)' }
-      },
-      required: ['type', 'ticker']
-    }
-  },
-  {
-    name: 'binary_analyst',
-    parameters: {
-      type: Type.OBJECT,
-      description: 'Perform a hex-level analysis of an attached binary or text file.',
-      properties: {
-        file_name: { type: Type.STRING, description: 'The name of the file to scan' }
-      },
-      required: ['file_name']
-    }
   }
 ];
 
-export const sendMessageToAI = async (history: Message[], currentUserMessageParts: Part[], location?: { latitude: number, longitude: number }) => {
+export const sendMessageToAI = async (history: Message[], currentUserMessageParts: Part[], options: { model?: string, useSearch?: boolean, useMaps?: boolean, location?: { latitude: number, longitude: number } } = {}) => {
+    const ai = getAI();
     const queryText = currentUserMessageParts.find(p => 'text' in p)?.text || "";
-    const isMapQuery = /near|nearby|where is|location|map|find|restaurant|store|osint|geospatial/i.test(queryText);
+    
+    // Intelligent model and tool selection logic
+    let model = options.model || 'gemini-3-flash-preview'; // Default to Flash for speed
+    const tools: any[] = [];
+    let toolConfig: any = undefined;
+
+    const isLocationQuery = /near|nearby|where is|location|map|find|restaurant|store|osint|geospatial/i.test(queryText);
+    const isComplexQuery = /analyze|explain|reason|complex|code|refactor|simulate|journey/i.test(queryText);
+    const hasImage = currentUserMessageParts.some(p => 'inlineData' in p);
+
+    if (isLocationQuery || options.useMaps) {
+        model = 'gemini-2.5-flash';
+        tools.push({ googleMaps: {} });
+        if (options.location) {
+            toolConfig = {
+                retrievalConfig: {
+                    latLng: {
+                        latitude: options.location.latitude,
+                        longitude: options.location.longitude
+                    }
+                }
+            };
+        }
+    } else if (options.useSearch || /current|news|latest|recent|who is|what happened/i.test(queryText)) {
+        model = 'gemini-3-flash-preview';
+        tools.push({ googleSearch: {} });
+    } else if (isComplexQuery || hasImage) {
+        // AI Chatbot and Image Analysis use Pro
+        model = 'gemini-3-pro-preview';
+    }
 
     const contents: Content[] = history
         .filter(msg => msg.id !== 'init' && msg.text)
@@ -102,58 +77,87 @@ export const sendMessageToAI = async (history: Message[], currentUserMessagePart
     
     contents.push({ role: 'user', parts: currentUserMessageParts });
 
-    // Use gemini-2.5-flash for maps queries as per rules, otherwise use gemini-3-flash-preview
-    const model = isMapQuery ? 'gemini-2.5-flash' : 'gemini-3-flash-preview';
-
     return await ai.models.generateContentStream({
         model: model,
         contents: contents,
         config: {
             systemInstruction: AI_PERSONA_INSTRUCTION,
-            tools: isMapQuery 
-                ? [{ googleMaps: {} }, { googleSearch: {} }] 
-                : [{ functionDeclarations: toolDeclarations }, { googleSearch: {} }],
-            toolConfig: (isMapQuery && location) ? {
-              retrievalConfig: {
-                latLng: {
-                  latitude: location.latitude,
-                  longitude: location.longitude
-                }
-              }
-            } : undefined
+            tools: tools.length > 0 ? tools : [{ functionDeclarations: toolDeclarations }],
+            toolConfig: toolConfig
         },
     });
 };
 
-export const generateImageFromAI = async (prompt: string, aspectRatio: string = '1:1'): Promise<string> => {
+export const editImageWithAI = async (imageB64: string, mimeType: string, prompt: string) => {
+    const ai = getAI();
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash-image',
-        contents: { parts: [{ text: prompt }] },
-        config: { imageConfig: { aspectRatio: aspectRatio as any } }
+        contents: {
+            parts: [
+                { inlineData: { data: imageB64, mimeType: mimeType } },
+                { text: prompt }
+            ]
+        }
     });
-    for (const part of response.candidates[0].content.parts) {
-        if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-    }
-    throw new Error("Forge failed.");
-}
 
-export const generateAudioFromAI = async (prompt: string): Promise<string> => {
-    const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-preview-tts",
-        contents: [{ parts: [{ text: `Say with a cool persona: ${prompt}` }] }],
-        config: {
-            responseModalities: [Modality.AUDIO],
-            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } } },
-        },
-    });
-    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    if (!base64Audio) throw new Error("Sonic failure.");
-    
-    // Convert PCM to playable format (simulation)
-    const binaryString = atob(base64Audio);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
-    return URL.createObjectURL(new Blob([bytes], { type: 'audio/wav' }));
+    const candidate = response.candidates?.[0];
+    if (!candidate) throw new Error("No response from Forge.");
+
+    let editedImageUrl = '';
+    let textResponse = '';
+
+    for (const part of candidate.content.parts) {
+        if (part.inlineData) {
+            editedImageUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+        } else if (part.text) {
+            textResponse += part.text;
+        }
+    }
+
+    return { editedImageUrl, textResponse };
 };
 
-export const resetChat = () => { /* Session is stateless in this implementation */ };
+export const connectLiveSynapse = async (callbacks: {
+    onAudioChunk: (base64: string) => void;
+    onInterrupted: () => void;
+    onTranscription: (text: string, isUser: boolean) => void;
+    onTurnComplete: () => void;
+}) => {
+    const ai = getAI();
+    return ai.live.connect({
+        model: 'gemini-2.5-flash-native-audio-preview-09-2025',
+        callbacks: {
+            onopen: () => console.log("Live Synapse Link Established"),
+            onmessage: async (message: LiveServerMessage) => {
+                if (message.serverContent?.modelTurn?.parts[0]?.inlineData?.data) {
+                    callbacks.onAudioChunk(message.serverContent.modelTurn.parts[0].inlineData.data);
+                }
+                if (message.serverContent?.interrupted) {
+                    callbacks.onInterrupted();
+                }
+                if (message.serverContent?.inputTranscription) {
+                    callbacks.onTranscription(message.serverContent.inputTranscription.text, true);
+                }
+                if (message.serverContent?.outputTranscription) {
+                    callbacks.onTranscription(message.serverContent.outputTranscription.text, false);
+                }
+                if (message.serverContent?.turnComplete) {
+                    callbacks.onTurnComplete();
+                }
+            },
+            onerror: (e) => console.error("Synapse Leak:", e),
+            onclose: () => console.log("Synapse Closed"),
+        },
+        config: {
+            responseModalities: [Modality.AUDIO],
+            speechConfig: {
+                voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Puck' } },
+            },
+            systemInstruction: AI_PERSONA_INSTRUCTION + "\nRespond briefly and keep the chaos alive.",
+            inputAudioTranscription: {},
+            outputAudioTranscription: {},
+        }
+    });
+};
+
+export const resetChat = () => { /* Session is stateless */ };

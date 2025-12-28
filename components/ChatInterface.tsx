@@ -1,49 +1,56 @@
 
 import React, { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { Part } from "@google/genai";
-import { Message, ActiveModel, GitData } from '../types';
-import { sendMessageToAI, resetChat } from '../services/geminiService';
-import * as gitService from '../services/gitService';
-import * as financialService from '../services/financialService';
-import * as workflowService from '../services/workflowService';
-import * as knowledgeService from '../services/knowledgeService';
-import * as vectorService from '../services/vectorDroneService';
+import { Message, ActiveModel } from '../types';
+import { sendMessageToAI, resetChat, connectLiveSynapse, editImageWithAI } from '../services/geminiService';
+import * as liveSyncService from '../services/liveSyncService';
 import ChatMessage from './ChatMessage';
 import { SendIcon } from './icons/SendIcon';
-import { CameraIcon } from './icons/CameraIcon';
+import { MicrophoneIcon } from './icons/MicrophoneIcon';
+import { KeyIcon } from './icons/KeyIcon';
+import { XIcon } from './icons/XIcon';
 import { VideoCameraIcon } from './icons/VideoCameraIcon';
 import { PaperclipIcon } from './icons/PaperclipIcon';
-import { XIcon } from './icons/XIcon';
-import { AttachmentIcon } from './icons/AttachmentIcons';
 import { useUIState } from '../contexts/UIStateContext';
 import { ZapIcon } from './icons/ZapIcon';
 import { PowersDropdown } from './PowersDropdown';
-import CameraView from './CameraView';
 import { useEmotionDetection } from '../hooks/useEmotionDetection';
 import HUDOverlay from './HUDOverlay';
 import MediaForge from './MediaForge';
-import MagicMirrorBox from './MagicMirrorBox';
+import LiveSyncStatus from './LiveSyncStatus';
 
-export type QuickActionType = 'image' | 'video' | 'audio' | 'icon' | '3d' | 'ui';
+declare const window: any;
 
-export const MEDIA_QUICK_ACTIONS: { name: string; type: QuickActionType; emoji: string; color: string; prefix: string }[] = [
-    { name: "Forge Image", type: 'image', prefix: "Generate an image of: ", emoji: "🎨", color: "#A020F0" },
-    { name: "Synth Video", type: 'video', prefix: "Generate a video of: ", emoji: "🎥", color: "#FFA500" },
-    { name: "Synth Audio", type: 'audio', prefix: "Generate music of: ", emoji: "🎵", color: "#1DB954" },
-    { name: "Icon Forge", type: 'icon', prefix: "Icon Forge | brand: ", emoji: "🌐", color: "#C0C0C0" },
-    { name: "3D Magic", type: '3d', prefix: "3D Magic", emoji: "🪄", color: "#8A2BE2" },
-    { name: "UI Forge", type: 'ui', prefix: "Generate a UI mockup for: ", emoji: "✨", color: "#4B0082" },
+export type QuickActionType = 'image' | 'video' | 'audio';
+
+export const MEDIA_QUICK_ACTIONS: { type: QuickActionType; name: string; emoji: string; prefix: string; }[] = [
+  { type: 'image', name: 'Forge', emoji: '🎨', prefix: 'Generate an image of: ' },
+  { type: 'video', name: 'Synth', emoji: '🎥', prefix: 'Generate a video of: ' },
+  { type: 'audio', name: 'Sonic', emoji: '🎵', prefix: 'Generate music of: ' },
 ];
 
-const blobToBase64 = (blob: Blob): Promise<string> => new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
-    reader.readAsDataURL(blob);
-});
+const decodeBase64 = (base64: string) => {
+  const binaryString = atob(base64);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+  return bytes;
+};
 
-const fileToPart = async (file: File): Promise<Part> => {
-  const base64 = await blobToBase64(file);
-  return { inlineData: { data: base64, mimeType: file.type } };
+const decodeAudioData = async (data: Uint8Array, ctx: AudioContext) => {
+  const dataInt16 = new Int16Array(data.buffer);
+  const buffer = ctx.createBuffer(1, dataInt16.length, 24000);
+  const channelData = buffer.getChannelData(0);
+  for (let i = 0; i < dataInt16.length; i++) channelData[i] = dataInt16[i] / 32768.0;
+  return buffer;
+};
+
+const encodePCM = (data: Float32Array) => {
+  const int16 = new Int16Array(data.length);
+  for (let i = 0; i < data.length; i++) int16[i] = data[i] * 32768;
+  let binary = '';
+  const bytes = new Uint8Array(int16.buffer);
+  for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
 };
 
 export interface ChatInterfaceHandle { clearChat: () => void; }
@@ -59,171 +66,322 @@ interface ChatInterfaceProps {
 const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ activeModel, setActiveModel, isTfReady, messages, setMessages }, ref) => {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [attachments, setAttachments] = useState<File[]>([]);
-  const [isDragging, setIsDragging] = useState(false);
   const [isPowersOpen, setIsPowersOpen] = useState(false);
-  const [activeForgeType, setActiveForgeType] = useState<QuickActionType | null>(null);
-  const [hudOps, setHudOps] = useState({ drone: false, data: false, chaos: false });
-  const [isCameraOpen, setIsCameraOpen] = useState(false);
-  const [isVisionModeEnabled, setIsVisionModeEnabled] = useState(false);
-  const { theme, isStreamMode, globalAnalyser } = useUIState();
+  const [isLiveSyncActive, setIsLiveSyncActive] = useState(false);
+  const [isVoiceActive, setIsVoiceActive] = useState(false);
+  const [quotaError, setQuotaError] = useState(false);
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const [activeForge, setActiveForge] = useState<QuickActionType | null>(null);
+  const [pendingImage, setPendingImage] = useState<{ b64: string, mime: string, name: string } | null>(null);
+  const { isStreamMode, globalAnalyser } = useUIState();
   
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const { 
     currentEmotion, 
-    isSyncing: isBioSyncing,
-    startDetection: startEmotionDetection, 
-    stopDetection: stopEmotionDetection,
-    analyzeImage: analyzeStaticImage
+    isSyncing: isBioSyncing, 
+    startDetection, 
+    stopDetection, 
+    stream: cameraStream 
   } = useEmotionDetection();
-
+  
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const textAreaRef = useRef<HTMLTextAreaElement>(null);
-  const pipVideoRef = useRef<HTMLVideoElement>(null);
+  const liveSessionRef = useRef<any>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const nextStartTimeRef = useRef(0);
+  const activeSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
+  const cameraPreviewRef = useRef<HTMLVideoElement>(null);
 
   useImperativeHandle(ref, () => ({ clearChat: () => resetChat() }));
-
-  useEffect(() => {
-    if (isVisionModeEnabled) startEmotionDetection();
-    else stopEmotionDetection();
-  }, [isVisionModeEnabled]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
+  useEffect(() => {
+      if (isCameraActive) {
+          startDetection();
+      } else {
+          stopDetection();
+      }
+  }, [isCameraActive, startDetection, stopDetection]);
+
+  useEffect(() => {
+      if (cameraPreviewRef.current && cameraStream) {
+          cameraPreviewRef.current.srcObject = cameraStream;
+      }
+  }, [cameraStream]);
+
+  const toggleVoiceBridge = async () => {
+    if (isVoiceActive) {
+      liveSessionRef.current?.close();
+      liveSessionRef.current = null;
+      setIsVoiceActive(false);
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!audioContextRef.current) {
+          audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+      }
+      const ctx = audioContextRef.current;
+      
+      const sessionPromise = connectLiveSynapse({
+        onAudioChunk: async (base64) => {
+            const data = decodeBase64(base64);
+            const buffer = await decodeAudioData(data, ctx);
+            const source = ctx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(ctx.destination);
+            
+            nextStartTimeRef.current = Math.max(nextStartTimeRef.current, ctx.currentTime);
+            source.start(nextStartTimeRef.current);
+            nextStartTimeRef.current += buffer.duration;
+            
+            activeSourcesRef.current.add(source);
+            source.onended = () => activeSourcesRef.current.delete(source);
+        },
+        onInterrupted: () => {
+            activeSourcesRef.current.forEach(s => s.stop());
+            activeSourcesRef.current.clear();
+            nextStartTimeRef.current = 0;
+        },
+        onTranscription: (text, isUser) => {
+            console.log(`[SYNAPSE_${isUser ? 'USER' : 'CORE'}]: ${text}`);
+        },
+        onTurnComplete: () => {
+            console.log("Synapse turn complete");
+        }
+      });
+
+      sessionPromise.then(session => {
+        liveSessionRef.current = session;
+        const inputCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+        const source = inputCtx.createMediaStreamSource(stream);
+        const processor = inputCtx.createScriptProcessor(4096, 1, 1);
+        
+        processor.onaudioprocess = (e) => {
+            const inputData = e.inputBuffer.getChannelData(0);
+            session.sendRealtimeInput({ media: { data: encodePCM(inputData), mimeType: 'audio/pcm;rate=16000' } });
+        };
+        
+        source.connect(processor);
+        processor.connect(inputCtx.destination);
+      });
+
+      setIsVoiceActive(true);
+    } catch (e) {
+      console.error("Failed to bridge synapse:", e);
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const b64 = (reader.result as string).split(',')[1];
+            setPendingImage({ b64, mime: file.type, name: file.name });
+        };
+        reader.readAsDataURL(file);
+    }
+  };
+
   const handleSend = useCallback(async (explicitInput?: string) => {
     const userMessageText = explicitInput || input;
-    if ((!userMessageText.trim() && attachments.length === 0) || isLoading) return;
+    if (!userMessageText.trim() && !pendingImage || isLoading) return;
 
     setIsLoading(true);
-    setHudOps(p => ({ ...p, data: true }));
+    setQuotaError(false);
 
-    let bioSignalContext = "";
-    if (attachments.length > 0) {
-        const imageAttachments = attachments.filter(f => f.type.startsWith('image/'));
-        for (const file of imageAttachments) {
-            const mood = await analyzeStaticImage(file);
-            if (mood) bioSignalContext += `\n[BIO_SIGNAL: CAPTAIN_MOOD=${mood.emotion.toUpperCase()}]`;
-        }
-    }
-    if (isVisionModeEnabled && currentEmotion) {
-        bioSignalContext += `\n[LIVE_BIO: ${currentEmotion.emotion.toUpperCase()}]`;
-    }
-
-    const enhancedPrompt = `${userMessageText}\n${bioSignalContext}`;
-    const fileParts = await Promise.all(attachments.map(fileToPart));
     const userMessage: Message = { 
-      id: Date.now().toString(), 
-      text: userMessageText, 
-      sender: 'user',
-      attachments: attachments.map(f => ({ name: f.name, type: f.type }))
+        id: Date.now().toString(), 
+        text: userMessageText, 
+        sender: 'user',
+        attachments: pendingImage ? [{ name: pendingImage.name, type: pendingImage.mime }] : []
     };
-    
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
-    setAttachments([]);
 
     const aiResponseId = (Date.now() + 1).toString();
     setMessages((prev) => [...prev, { id: aiResponseId, text: '', sender: 'ai', status: 'generating' }]);
 
     try {
-        const stream = await sendMessageToAI(messages, [...fileParts, { text: enhancedPrompt }]);
+        const parts: Part[] = [{ text: userMessageText }];
+        if (pendingImage) {
+            parts.push({ inlineData: { data: pendingImage.b64, mimeType: pendingImage.mime } });
+        }
+
+        const stream = await sendMessageToAI(messages, parts);
         let fullText = '';
-        let toolResolved = false;
+        let groundingChunks: any[] = [];
 
         for await (const chunk of stream) {
             if (chunk.text) {
                 fullText += chunk.text;
-                setMessages((prev) => prev.map((msg) => msg.id === aiResponseId ? { ...msg, text: fullText } : msg));
             }
-            
-            if (chunk.functionCalls && !toolResolved) {
-                toolResolved = true;
-                const fc = chunk.functionCalls[0];
-                let toolResult: Partial<Message> = {};
+            // Capture grounding chunks for Search/Maps
+            const metadata = (chunk as any).candidates?.[0]?.groundingMetadata;
+            if (metadata?.groundingChunks) {
+                groundingChunks = [...groundingChunks, ...metadata.groundingChunks];
+            }
 
-                switch (fc.name) {
-                    case 'git_scout':
-                        setHudOps(p => ({ ...p, drone: true }));
-                        const [struct, hist, deps] = await Promise.all([gitService.fetchRepoStructure(), gitService.fetchCommitHistory(), gitService.fetchDependencies()]);
-                        toolResult = { gitData: { repoName: gitService.getRepoName(), repoOwner: gitService.getRepoOwner(), structure: struct, commits: hist, dependencies: deps } };
-                        break;
-                    case 'financial_scout':
-                        const mockQuote = await financialService.getMockQuote(fc.args.ticker as string);
-                        toolResult = { financialData: { type: fc.args.type as any, data: mockQuote } };
-                        break;
-                    case 'automation_op':
-                        const dags = workflowService.getDags();
-                        toolResult = { workflowData: { dags } };
-                        break;
-                    case 'vector_drone_op':
-                        setHudOps(p => ({ ...p, drone: true }));
-                        const status = await vectorService.getStatus();
-                        toolResult = { vectorStatus: status };
-                        break;
-                    case 'binary_analyst':
-                        toolResult = { hexDumpData: { fileName: fc.args.file_name as string, hex: '46 75 58 53 74 69 58 58 20 43 4F 52 45', ascii: 'FuXStiXX CORE' } };
-                        break;
-                }
-                setMessages((prev) => prev.map((msg) => msg.id === aiResponseId ? { ...msg, ...toolResult, status: 'complete' } : msg));
-            }
+            setMessages((prev) => prev.map((msg) => msg.id === aiResponseId ? { 
+                ...msg, 
+                text: fullText,
+                mapsGrounding: groundingChunks.map(c => ({
+                    title: c.maps?.title || c.web?.title || 'Intelligence Chunk',
+                    uri: c.maps?.uri || c.web?.uri || ''
+                })).filter(c => c.uri)
+            } : msg));
         }
         setMessages((prev) => prev.map((msg) => msg.id === aiResponseId ? { ...msg, status: 'complete' } : msg));
+        setPendingImage(null);
     } catch (error: any) {
-        setMessages(prev => prev.map((msg) => msg.id === aiResponseId ? { ...msg, text: `Critical failure: ${error.message}`, status: 'error' } : msg));
+        const isQuota = error.message?.includes('429') || error.message?.includes('quota');
+        if (isQuota) setQuotaError(true);
+        setMessages(prev => prev.map((msg) => msg.id === aiResponseId ? { ...msg, text: isQuota ? "Tactical uplink saturated. Switch to Private Uplink to continue mission." : `Core Error: ${error.message}`, status: 'error' } : msg));
     } finally {
         setIsLoading(false);
-        setHudOps({ drone: false, data: false, chaos: false });
     }
-  }, [input, attachments, messages, isVisionModeEnabled, currentEmotion]);
+  }, [input, messages, setMessages, pendingImage]);
 
-  const themePrimaryColor = getComputedStyle(document.documentElement).getPropertyValue('--color-primary').trim() || '#32CD32';
+  const handleAlchemy = async (prompt: string) => {
+      if (!pendingImage) {
+          alert("Captain, provide an image subject for Alchemy first.");
+          return;
+      }
+      setIsLoading(true);
+      const aiResponseId = Date.now().toString();
+      setMessages(prev => [...prev, { id: aiResponseId, text: 'Alchemy in progress...', sender: 'ai', status: 'generating' }]);
+      
+      try {
+          const { editedImageUrl, textResponse } = await editImageWithAI(pendingImage.b64, pendingImage.mime, prompt);
+          setMessages(prev => prev.map(m => m.id === aiResponseId ? {
+              ...m,
+              text: textResponse || "Alchemy complete.",
+              status: 'complete',
+              media: { type: 'image', url: editedImageUrl, prompt: prompt, status: 'complete' }
+          } : m));
+          setPendingImage(null);
+      } catch (err: any) {
+          setMessages(prev => prev.map(m => m.id === aiResponseId ? { ...m, text: `Alchemy failure: ${err.message}`, status: 'error' } : m));
+      } finally {
+          setIsLoading(false);
+      }
+  };
+
+  const handleSwitchUplink = async () => {
+    if (window.aistudio?.openSelectKey) {
+        await window.aistudio.openSelectKey();
+        setQuotaError(false);
+        handleSend(messages[messages.length - 1]?.text); // Retry last message
+    }
+  };
 
   return (
-    <div className={`relative flex flex-col h-full bg-base p-4 transition-all duration-200 ${isDragging ? 'outline-dashed outline-2 outline-primary' : ''}`}
-      onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-      onDragLeave={() => setIsDragging(false)}
-      onDrop={(e) => { e.preventDefault(); setIsDragging(false); setAttachments(prev => [...prev, ...Array.from(e.dataTransfer.files)]); }}
-    >
-      {!isStreamMode && <HUDOverlay isLoading={isLoading} activeForge={activeForgeType !== null} currentEmotion={currentEmotion} isBioSyncing={isBioSyncing} activeDataTransfer={isLoading} activeChaosEngine={true} />}
-      {isCameraOpen && <CameraView onClose={() => setIsCameraOpen(false)} onCapture={(f) => { setAttachments(prev => [...prev, f]); setIsCameraOpen(false); }} />}
-      {activeForgeType && <MediaForge type={activeForgeType} onClose={() => setActiveForgeType(null)} onExecute={(p) => { handleSend(p); setActiveForgeType(null); }} />}
+    <div className={`relative flex flex-col h-full bg-base p-4 overflow-hidden`}>
+      <HUDOverlay 
+        isLoading={isLoading} 
+        activeForge={!!activeForge} 
+        currentEmotion={currentEmotion} 
+        isBioSyncing={isBioSyncing} 
+        activeDataTransfer={isLoading} 
+        activeChaosEngine={true} 
+      />
       
-      {isVisionModeEnabled && !isStreamMode && (
-        <div className="absolute bottom-24 right-8 w-48 aspect-video bg-black border-2 border-primary rounded-lg overflow-hidden z-10 shadow-lg shadow-primary/20 animate-in fade-in zoom-in duration-300">
-            <video ref={pipVideoRef} autoPlay playsInline muted className="w-full h-full object-cover opacity-80" />
-            <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-primary/20 backdrop-blur-sm rounded text-[8px] font-mono text-primary uppercase border border-primary/20">Bio_Sync_Active</div>
-        </div>
+      {quotaError && (
+          <div className="absolute top-24 left-1/2 -translate-x-1/2 z-[60] w-full max-w-md p-4 bg-danger/10 border border-danger/40 backdrop-blur-xl rounded-xl shadow-2xl animate-in zoom-in duration-300">
+              <h3 className="text-danger font-mono font-bold text-xs uppercase mb-2 flex items-center">
+                  <span className="mr-2 animate-pulse">⚠️</span> Uplink Saturated (Quota Exceeded)
+              </h3>
+              <p className="text-[10px] text-secondary/80 font-mono mb-4">Shared mission frequencies are crowded. Switch to your private tactical uplink (API Key) to restore communications.</p>
+              <div className="flex space-x-3">
+                  <button onClick={handleSwitchUplink} className="flex-1 py-2 bg-danger text-white text-[10px] font-mono font-bold rounded hover:bg-danger/80 transition-all flex items-center justify-center space-x-2">
+                      <KeyIcon />
+                      <span>Switch to Private Uplink</span>
+                  </button>
+                  <button onClick={() => setQuotaError(false)} className="p-2 text-secondary hover:text-white"><XIcon /></button>
+              </div>
+          </div>
       )}
 
-      {!isStreamMode && <div className="absolute top-20 right-8 z-10 pointer-events-none sm:pointer-events-auto"><MagicMirrorBox analyser={globalAnalyser} color={themePrimaryColor} intensity={isLoading ? 0.9 : 0.4} isActive={true} /></div>}
+      {isLiveSyncActive && <div className="absolute top-24 left-8 z-10"><LiveSyncStatus isActive={true} /></div>}
+      
+      {/* Live Bio-Link Camera Feed */}
+      {isCameraActive && !isStreamMode && (
+          <div className="absolute top-24 right-10 z-10 w-64 aspect-video bg-black border border-primary/40 rounded shadow-2xl shadow-primary/10 animate-in fade-in zoom-in duration-500 group">
+              <video 
+                  ref={cameraPreviewRef} 
+                  autoPlay 
+                  playsInline 
+                  muted 
+                  className="w-full h-full object-cover grayscale brightness-125 opacity-70 group-hover:opacity-100 transition-opacity"
+              />
+              <div className="absolute inset-0 border-[1px] border-primary/20 pointer-events-none"></div>
+              <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-primary/20 backdrop-blur-sm rounded-sm text-[7px] font-mono text-primary uppercase tracking-widest border border-primary/40 animate-pulse">
+                  Bio_Link_Optical
+              </div>
+              {currentEmotion && (
+                  <div className="absolute bottom-2 left-2 right-2 px-2 py-1 bg-black/60 backdrop-blur-sm rounded-sm border border-primary/10 text-[9px] font-mono text-primary flex justify-between items-center">
+                      <span className="uppercase">{currentEmotion.emotion}</span>
+                      <span>{(currentEmotion.score * 100).toFixed(0)}%</span>
+                  </div>
+              )}
+          </div>
+      )}
 
-      <div className={`flex-1 overflow-y-auto pr-2 ${isStreamMode ? 'pt-4' : 'pt-16'}`}><div className="space-y-6">{messages.map((msg) => (<ChatMessage key={msg.id} message={msg} onEditMedia={() => {}} />))}<div ref={chatEndRef} /></div></div>
+      <div className={`flex-1 overflow-y-auto pr-2 custom-scrollbar ${isStreamMode ? 'pt-4' : 'pt-20'}`}>
+          <div className="space-y-6">{messages.map((msg) => (<ChatMessage key={msg.id} message={msg} onEditMedia={() => {}} />))}<div ref={chatEndRef} /></div>
+      </div>
       
       {!isStreamMode && (
         <div className="pt-4 mt-auto">
-          {attachments.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-3 px-1">{attachments.map((file, i) => (
-                <div key={i} className="flex items-center space-x-2 bg-layer-2 border border-primary/20 rounded-lg px-2 py-1.5 text-xs text-secondary shadow-lg">
-                  <AttachmentIcon fileType={file.type} /><span className="truncate max-w-[150px] font-mono">{file.name}</span>
-                  <button onClick={() => setAttachments(prev => prev.filter((_, idx) => idx !== i))} className="p-1 hover:text-danger"><XIcon /></button>
-                </div>
-              ))}</div>
+          {pendingImage && (
+              <div className="mb-2 flex items-center p-2 bg-layer-1 rounded-lg border border-primary/30 animate-in slide-in-from-bottom-2">
+                  <div className="w-10 h-10 rounded bg-primary/20 flex items-center justify-center mr-3 overflow-hidden">
+                      <img src={`data:${pendingImage.mime};base64,${pendingImage.b64}`} className="w-full h-full object-cover" alt="pending" />
+                  </div>
+                  <span className="text-xs font-mono text-secondary truncate flex-1">{pendingImage.name}</span>
+                  <button onClick={() => setPendingImage(null)} className="p-1 text-gray-500 hover:text-danger"><XIcon /></button>
+              </div>
           )}
           <div className="relative flex items-center">
               <button onClick={() => setIsPowersOpen(!isPowersOpen)} className="p-2 mr-2 rounded-full bg-layer-1 text-secondary hover:text-primary transition-colors"><ZapIcon /></button>
-              <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyPress={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }} placeholder="Command the Chaos Engine..." className="w-full bg-layer-1 border border-layer-3 rounded-lg p-3 pr-[160px] text-gray-200 focus:outline-none focus:ring-1 focus:ring-primary font-mono text-sm" rows={1} />
+              <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyPress={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }} placeholder="Command the Chaos Engine..." className="w-full bg-layer-1 border border-layer-3 rounded-lg p-3 pr-[180px] text-gray-200 focus:outline-none focus:ring-1 focus:ring-primary font-mono text-sm" rows={1} />
               <div className="absolute right-3 flex items-center space-x-1">
-                  <button onClick={() => fileInputRef.current?.click()} className="p-2 text-secondary hover:text-primary" title="Upload Mission Intel"><PaperclipIcon /></button>
-                  <button onClick={() => setIsVisionModeEnabled(!isVisionModeEnabled)} className={`p-2 rounded-lg transition-all ${isVisionModeEnabled ? 'text-primary bg-primary/10' : 'text-secondary'}`} title="Continuous Vision Mode"><VideoCameraIcon /></button>
-                  <button onClick={() => setIsCameraOpen(true)} className="p-2 text-secondary hover:text-primary" title="Camera Snapshot"><CameraIcon /></button>
+                  <button onClick={() => fileInputRef.current?.click()} className="p-2 text-secondary hover:text-primary transition-all" title="Uplink Image Data"><PaperclipIcon /></button>
+                  <button onClick={() => setIsCameraActive(!isCameraActive)} className={`p-2 rounded-lg transition-all ${isCameraActive ? 'text-primary bg-primary/10' : 'text-secondary hover:text-primary'}`} title="Toggle Bio-Sync Camera"><VideoCameraIcon /></button>
+                  <button onClick={toggleVoiceBridge} className={`p-2 rounded-lg transition-all ${isVoiceActive ? 'text-primary bg-primary/10 animate-pulse' : 'text-secondary hover:text-primary'}`} title="Live Synapse (Voice Mode)"><MicrophoneIcon /></button>
                   <button onClick={() => handleSend()} className="p-2 bg-primary text-black rounded-lg hover:scale-105" title="Transmit Message"><SendIcon /></button>
               </div>
-              <input type="file" ref={fileInputRef} onChange={(e) => { if(e.target.files) setAttachments(prev => [...prev, ...Array.from(e.target.files!)]); e.target.value = ''; }} className="hidden" multiple />
-              {isPowersOpen && <PowersDropdown onPowerClick={(p) => { const forge = MEDIA_QUICK_ACTIONS.find(a => p.startsWith(a.prefix)); if(forge) setActiveForgeType(forge.type); else setInput(p); setIsPowersOpen(false); }} onClose={() => setIsPowersOpen(false)} />}
+              <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
+              {isPowersOpen && <PowersDropdown onPowerClick={(p) => { 
+                if (p.startsWith("Generate an image of:")) setActiveForge('image');
+                else if (p.startsWith("Generate a video of:")) setActiveForge('video');
+                else if (p.startsWith("Generate music of:")) setActiveForge('audio');
+                else if (p.startsWith("Image Alchemy")) {
+                    const promptPart = p.split('| prompt: ')[1] || '';
+                    if (pendingImage) handleAlchemy(promptPart);
+                    else alert("Captain, provide an image subject for Alchemy first.");
+                }
+                else setInput(p);
+                setIsPowersOpen(false); 
+              }} onClose={() => setIsPowersOpen(false)} />}
           </div>
         </div>
+      )}
+
+      {activeForge && (
+        <MediaForge 
+          type={activeForge} 
+          onClose={() => setActiveForge(null)} 
+          onExecute={(p) => {
+            handleSend(p);
+            setActiveForge(null);
+          }}
+        />
       )}
     </div>
   );

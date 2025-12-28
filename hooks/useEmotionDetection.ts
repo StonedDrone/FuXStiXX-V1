@@ -24,10 +24,10 @@ export const useEmotionDetection = () => {
     const [error, setError] = useState<string | null>(null);
     const [isInitializing, setIsInitializing] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
+    const [stream, setStream] = useState<MediaStream | null>(null);
 
     const humanRef = useRef<any | null>(null);
     const videoRef = useRef<HTMLVideoElement | null>(null);
-    const streamRef = useRef<MediaStream | null>(null);
     const animationFrameId = useRef<number | null>(null);
 
     const initHuman = async () => {
@@ -97,9 +97,9 @@ export const useEmotionDetection = () => {
             cancelAnimationFrame(animationFrameId.current);
             animationFrameId.current = null;
         }
-        if (streamRef.current) {
-            streamRef.current.getTracks().forEach(track => track.stop());
-            streamRef.current = null;
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+            setStream(null);
         }
         if (videoRef.current) {
             videoRef.current.srcObject = null;
@@ -107,7 +107,7 @@ export const useEmotionDetection = () => {
         setIsDetecting(false);
         setIsSyncing(false);
         setCurrentEmotion(null);
-    }, []);
+    }, [stream]);
 
     const startDetection = useCallback(async () => {
         if (isDetecting || isInitializing) return;
@@ -120,16 +120,17 @@ export const useEmotionDetection = () => {
             if (!navigator.mediaDevices?.getUserMedia) {
                 throw new Error("Optical link not supported by this vessel.");
             }
-            streamRef.current = await navigator.mediaDevices.getUserMedia({ 
+            const s = await navigator.mediaDevices.getUserMedia({ 
                 video: { width: { ideal: 640 }, height: { ideal: 480 } } 
             });
+            setStream(s);
 
             if (!videoRef.current) {
                 videoRef.current = document.createElement('video');
                 videoRef.current.style.display = 'none';
                 document.body.appendChild(videoRef.current);
             }
-            videoRef.current.srcObject = streamRef.current;
+            videoRef.current.srcObject = s;
             await videoRef.current.play();
 
             await initHuman();
@@ -164,6 +165,7 @@ export const useEmotionDetection = () => {
         error, 
         startDetection, 
         stopDetection,
-        analyzeImage 
+        analyzeImage,
+        stream
     };
 };

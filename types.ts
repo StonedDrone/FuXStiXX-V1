@@ -8,6 +8,18 @@ export interface Attachment {
     type: string;
 }
 
+export interface TerminalLine {
+    id: string;
+    text: string;
+    type: 'input' | 'output' | 'error' | 'system';
+    timestamp: string;
+}
+
+export interface TerminalData {
+    lines: TerminalLine[];
+    currentNode: string;
+}
+
 export interface GitCommit {
     sha: string;
     author: string;
@@ -258,6 +270,7 @@ export interface Message {
   playlistAnalysisData?: PlaylistAnalysisData;
   gitData?: GitData;
   mapsGrounding?: MapGroundingChunk[];
+  terminalData?: TerminalData;
   isLiveStream?: boolean;
   isLiveSyncUpdate?: boolean;
 }

@@ -6,6 +6,7 @@ import { RefreshIcon } from './icons/RefreshIcon';
 import { CogIcon } from './icons/CogIcon';
 import { StreamIcon } from './icons/StreamIcon';
 import { BroadcastIcon } from './icons/BroadcastIcon';
+import { TerminalIcon } from './icons/TerminalIcon';
 import { useUIState } from '../contexts/UIStateContext';
 
 interface HeaderProps {
@@ -13,9 +14,10 @@ interface HeaderProps {
   onPlaylistToggle: () => void;
   onSettingsToggle: () => void;
   onClearChat: () => void;
+  onTerminalToggle: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ onCodexToggle, onPlaylistToggle, onSettingsToggle, onClearChat }) => {
+const Header: React.FC<HeaderProps> = ({ onCodexToggle, onPlaylistToggle, onSettingsToggle, onClearChat, onTerminalToggle }) => {
   const [cameraPermission, setCameraPermission] = useState('prompt');
   const [micPermission, setMicPermission] = useState('prompt');
   const { setIsStudioMode } = useUIState();
@@ -62,6 +64,14 @@ const Header: React.FC<HeaderProps> = ({ onCodexToggle, onPlaylistToggle, onSett
         <p className="text-sm text-secondary">Stoned Drones Chaos Engine</p>
       </div>
       <div className="flex items-center space-x-2">
+        <button 
+            onClick={onTerminalToggle}
+            className="p-2 rounded-full text-secondary hover:text-primary hover:bg-layer-2 transition-all duration-200"
+            aria-label="Toggle Terminal Uplink"
+            title="CLI Uplink (Remote Terminal)"
+        >
+            <TerminalIcon />
+        </button>
         <button 
           onClick={() => setIsStudioMode(true)}
           className="p-2 rounded-full text-secondary hover:text-primary hover:bg-layer-2 transition-all duration-200"

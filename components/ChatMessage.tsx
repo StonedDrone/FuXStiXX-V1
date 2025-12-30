@@ -85,7 +85,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEditMedia, onAddTo
         : message.isLiveSyncUpdate
         ? 'bg-layer-1 border border-dashed border-blue-500/50'
         : isAI 
-        ? `bg-layer-1 ${message.status === 'generating' ? 'ai-bubble-generating border border-primary/20 shadow-lg' : ''}` 
+        ? `bg-layer-1 ${message.status === 'generating' ? 'ai-bubble-generating border-transparent' : 'border-transparent'}` 
         : 'bg-accent text-black'
       }`}>
         {message.status === 'generating' && !message.text && !message.media && (

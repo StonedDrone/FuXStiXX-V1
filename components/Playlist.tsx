@@ -33,6 +33,7 @@ const Playlist: React.FC<PlaylistProps> = ({ isOpen, onClose }) => {
     const [themeColor, setThemeColor] = useState('#32CD32');
     const [visMode, setVisMode] = useState<'standard' | 'vortex'>('standard');
     const [customMilk, setCustomMilk] = useState<string | undefined>(undefined);
+    const [customMilkName, setCustomMilkName] = useState<string | null>(null);
     const { theme, setGlobalAnalyser, globalAnalyser } = useUIState();
 
     const audioRef = useRef<HTMLAudioElement>(null);
@@ -40,6 +41,7 @@ const Playlist: React.FC<PlaylistProps> = ({ isOpen, onClose }) => {
     const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
     const milkInputRef = useRef<HTMLInputElement>(null);
 
+    // Load saved playlist on initial mount
     useEffect(() => {
         try {
             const savedPlaylist = localStorage.getItem('fuxstixx-playlist');
@@ -51,6 +53,7 @@ const Playlist: React.FC<PlaylistProps> = ({ isOpen, onClose }) => {
         }
     }, []);
 
+    // Synchronize UI theme color with visualizer
     useEffect(() => {
         if (isOpen) {
             const color = getComputedStyle(document.documentElement).getPropertyValue('--color-primary').trim();
@@ -67,6 +70,7 @@ const Playlist: React.FC<PlaylistProps> = ({ isOpen, onClose }) => {
         savePlaylist(MOCK_PLAYLIST);
     };
 
+    // Initialize Web Audio API components for visualization
     const setupAudioContext = () => {
         if (!audioRef.current || audioContextRef.current) return;
         const context = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -122,6 +126,7 @@ const Playlist: React.FC<PlaylistProps> = ({ isOpen, onClose }) => {
         handlePlayTrack(playlist[prevIndex]);
     };
 
+    // Update audio source when currentTrack changes
     useEffect(() => {
         if (audioRef.current && currentTrack) {
             audioRef.current.src = currentTrack.audioSrc;
@@ -142,10 +147,17 @@ const Playlist: React.FC<PlaylistProps> = ({ isOpen, onClose }) => {
             const reader = new FileReader();
             reader.onload = (event) => {
                 setCustomMilk(event.target?.result as string);
+                setCustomMilkName(file.name);
                 setVisMode('vortex');
             };
             reader.readAsText(file);
         }
+    };
+
+    const handleEjectMilk = () => {
+        setCustomMilk(undefined);
+        setCustomMilkName(null);
+        if (milkInputRef.current) milkInputRef.current.value = '';
     };
     
     const TrackItem: React.FC<{ track: Track }> = ({ track }) => (
@@ -186,10 +198,24 @@ const Playlist: React.FC<PlaylistProps> = ({ isOpen, onClose }) => {
                             >Vortex</button>
                         </div>
                         {visMode === 'vortex' && (
-                            <button 
-                                onClick={() => milkInputRef.current?.click()}
-                                className="text-[10px] font-mono text-primary/60 hover:text-primary transition-colors border border-primary/20 px-2 py-1 rounded-md"
-                            >Inject .milk</button>
+                            <div className="flex items-center space-x-2">
+                                <button 
+                                    onClick={() => milkInputRef.current?.click()}
+                                    className={`text-[10px] font-mono transition-colors border px-2 py-1 rounded-md ${customMilk ? 'text-success border-success/40 bg-success/10' : 'text-primary/60 border-primary/20 hover:text-primary'}`}
+                                >
+                                    {customMilkName ? `Using: ${customMilkName}` : 'Inject .milk'}
+                                </button>
+                                <input type="file" ref={milkInputRef} className="hidden" accept=".milk" onChange={handleMilkUpload} />
+                                {customMilk && (
+                                    <button 
+                                        onClick={handleEjectMilk}
+                                        className="text-[10px] font-mono text-danger/60 hover:text-danger p-1"
+                                        title="Eject custom preset"
+                                    >
+                                        <XIcon />
+                                    </button>
+                                )}
+                            </div>
                         )}
                     </div>
                     <button onClick={onClose} className="p-2 text-secondary hover:text-danger">
@@ -203,39 +229,40 @@ const Playlist: React.FC<PlaylistProps> = ({ isOpen, onClose }) => {
                            <p className="text-lg text-secondary mb-4 font-mono">NO DATA STREAM DETECTED</p>
                            <button
                                onClick={handleImportPlaylist}
-                               className="p-3 px-6 bg-layer-3 border border-primary/50 rounded-lg text-sm font-mono hover:bg-primary hover:text-black transition-all"
+                               className="px-6 py-2 bg-primary text-black font-bold rounded-lg hover:scale-105 transition-transform"
                            >
-                               SYNC MOCK JAMS
+                               IMPORT MISSION JAMS
                            </button>
                        </div>
                    ) : (
-                        <div className="space-y-2">
-                            {playlist.map(track => <TrackItem key={track.id} track={track} />)}
-                        </div>
+                       <div className="space-y-2">
+                           {playlist.map(track => <TrackItem key={track.id} track={track} />)}
+                       </div>
                    )}
                 </div>
 
-                <div className="flex-shrink-0 border-t border-layer-3 bg-black/40">
-                     <Visualizer 
+                <div className="p-4 bg-layer-1 border-t border-layer-3 flex-shrink-0">
+                    <Visualizer 
                         analyser={globalAnalyser} 
                         isPlaying={isPlaying} 
                         themeColor={themeColor} 
-                        mode={visMode}
+                        mode={visMode} 
                         customPreset={customMilk}
                     />
-                     {currentTrack && (
-                         <PlaybackControls
-                            track={currentTrack}
-                            isPlaying={isPlaying}
-                            onPlayPause={() => handlePlayTrack(currentTrack)}
-                            onNext={handleNext}
-                            onPrev={handlePrev}
-                        />
-                     )}
+                    {currentTrack && (
+                        <div className="mt-4">
+                            <PlaybackControls 
+                                track={currentTrack} 
+                                isPlaying={isPlaying} 
+                                onPlayPause={() => handlePlayTrack(currentTrack)} 
+                                onNext={handleNext} 
+                                onPrev={handlePrev}
+                            />
+                        </div>
+                    )}
                 </div>
+                <audio ref={audioRef} className="hidden" />
             </div>
-            <input type="file" ref={milkInputRef} className="hidden" accept=".milk" onChange={handleMilkUpload} />
-            <audio ref={audioRef} />
         </div>
     );
 };

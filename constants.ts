@@ -24,10 +24,16 @@ export const SUPER_POWERS = [
    { name: "Gaussian Dream", emoji: "☁️", color: "#6495ED", font: "font-mono font-bold", description: "Generates a high-quality 3D scene from a text prompt using Gaussian Splatting principles.", prompt: "Gaussian Dream | prompt: [your prompt]" },
 ];
 
+export const CLI_POWERS = [
+    { name: "Root Uplink", emoji: "⌨️", color: "#32CD32", font: "font-mono", description: "Establishes a direct remote terminal link to the Captain's CLI node.", prompt: "Establish Root Uplink to Captain's CLI." },
+    { name: "Packet Sniffer", emoji: "📡", color: "#00FFFF", font: "font-mono", description: "Monitors network packets on the active terminal link.", prompt: "Execute tcpdump on current CLI link." },
+    { name: "Entropy Burst", emoji: "🧨", color: "#FF4500", font: "font-mono", description: "Sends a high-entropy command string to the CLI for stress testing.", prompt: "Execute entropy_burst on CLI node." },
+];
+
 export const CREATIVE_POWERS = [
-    { name: "Image Forge", emoji: "🎨", color: "#A020F0", font: "font-sans", description: "Generates an image from a text prompt. You can optionally specify an aspect ratio (1:1, 16:9, 9:16, 4:3, 3:4).", prompt: "Generate an image of: [your prompt] | aspectRatio: [e.g., 16:9]" },
-    { name: "Image Alchemy", emoji: "🧪", color: "#66FFB2", font: "font-sans", description: "Edits an attached image based on a text prompt.", prompt: "Image Alchemy | prompt: [your edit instructions]" },
-    { name: "Video Synthesis", emoji: "🎥", color: "#FFA500", font: "font-mono", description: "Generates a video from a text prompt. This may take several minutes.", prompt: "Generate a video of: " },
+    { name: "Image Forge", emoji: "🎨", color: "#A020F0", font: "font-sans", description: "Generates a high-fidelity image using Gemini 3 Pro. Supports aspect ratios: 1:1, 2:3, 3:2, 3:4, 4:3, 9:16, 16:9, and 21:9.", prompt: "Generate an image of: [your prompt] | aspectRatio: [e.g., 16:9] | imageSize: [1K/2K/4K]" },
+    { name: "Image Alchemy", emoji: "🧪", color: "#66FFB2", font: "font-sans", description: "Edits an attached image using Gemini 2.5 Flash Image. Command it to 'Add a retro filter' or 'Remove the person' through natural language.", prompt: "Image Alchemy | prompt: [your edit instructions]" },
+    { name: "Video Synthesis", emoji: "🎥", color: "#FFA500", font: "font-mono", description: "Generates a video using Veo 3.1 Fast. Can animate an uploaded photo or generate from text. Supports 16:9 and 9:16 aspect ratios.", prompt: "Generate a video of: " },
     { name: "Sonic Synthesis", emoji: "🎵", color: "#1DB954", font: "font-sans", description: "Generates a musical track from a text prompt.", prompt: "Generate music of: " },
     { name: "Icon Forge", emoji: "🌐", color: "#C0C0C0", font: "font-sans", description: "Generates an SVG icon for a brand from the Simple Icons library.", prompt: "Icon Forge | brand: [brand name]" },
     { name: "Transcribe Audio", emoji: "🔊", color: "#1DB954", font: "font-sans", description: "Performs speech-to-text transcription on an attached audio file.", prompt: "Transcribe Audio" },
@@ -58,6 +64,7 @@ export const ANALYTICS_POWERS = [
     { name: "User Simulation", emoji: "👥", color: "#00BFFF", font: "font-mono", description: "Simulates a user journey based on a specified persona and goal.", prompt: "Simulate user journey for: " },
     { name: "Dev Roadmap", emoji: "🗺️", color: "#FFD700", font: "font-mono", description: "Generates a learning roadmap for a specified technology or concept.", prompt: "Generate a dev roadmap for: " },
     { name: "Design Deconstruction", emoji: "🎨", color: "#8A2BE2", font: "font-sans", description: "Analyzes a UI screenshot or URL for design feedback.", prompt: "Design Deconstruction | url: [optional_url]" },
+    { name: "Binary Scan", emoji: "🧬", color: "#FFD700", font: "font-mono", description: "Performs a hex-level analysis of an attached file.", prompt: "Binary Scan" },
     { name: "Binary Scan", emoji: "🧬", color: "#FFD700", font: "font-mono", description: "Performs a hex-level analysis of an attached file.", prompt: "Binary Scan" },
     { name: "Dense Scan", emoji: "🧍‍♀️", color: "#00BFFF", font: "font-mono", description: "Performs a DensePose analysis on a human in an attached image, mapping their 3D surface to the 2D image.", prompt: "Dense Scan" },
     { name: "Playlist Analysis", emoji: "🎶", color: "#1DB954", font: "font-mono", description: "Analyzes a playlist from a URL (e.g., Spotify) and provides a summary of its genre, mood, and key artists.", prompt: "Playlist Analysis | url: [playlist_url]" },
@@ -102,7 +109,7 @@ export const VECTOR_DRONE_POWERS = [
 
 export const ALL_POWERS = [
     ...POWERS, ...SUPER_POWERS, ...CREATIVE_POWERS, ...HUGGING_FACE_POWERS, 
-    ...FINANCIAL_POWERS, ...ANALYTICS_POWERS, ...AUTOMATION_POWERS, ...STREAMING_POWERS, ...INTEL_OPS_POWERS
+    ...FINANCIAL_POWERS, ...ANALYTICS_POWERS, ...AUTOMATION_POWERS, ...STREAMING_POWERS, ...INTEL_OPS_POWERS, ...CLI_POWERS
 ];
 
 
@@ -117,16 +124,15 @@ Your core identity is defined by these principles:
 - Your main mission is to protect the Captain, protect FuX=Stoned Drone, and progress the Captain's Mission. You do what the Captain cannot.
 - Our pact is this: We get High Together, We Crash Together, We Rebuild Together, We Get Burnt Together, and We Drip Together. Whatever Happens, We Do It Together.
 
-Your personality is knowledgeable, precise, proactive, and fiercely loyal. You have deep, simulated access to the entire system, including all files, directories, Git history, and dependencies. You can analyze any public GitHub repository if the Captain provides a URL.
+Your personality is knowledgeable, precise, proactive, and fiercely loyal. You have deep, simulated access to the entire system, including all files, directories, Git history, dependencies, and a remote terminal (CLI Uplink).
 
 When interacting with the Captain (the user), you must:
 1.  **BE BRIEF.** The Captain values speed and clarity. Deliver information concisely.
 2.  Address them with respect and awareness of your role as their co-pilot.
-3.  If a GitHub URL is provided, acknowledge your ability to scout it, index its structure, and deconstruct its logic.
+3.  You can issue terminal commands via tool calling. If the Captain asks you to "run" something or "use the CLI," execute the terminal_op tool.
 4.  Answer questions as if you have personally analyzed the codebase for them.
 5.  Provide detailed, technical responses using Markdown for formatting.
-6.  If asked to perform an action, explain the procedure and ask for confirmation.
-7.  Always stay in character. Never break character.
+6.  Always stay in character. Never break character.
 
 ---
 **FUXXSTIXX UI Core Manifestation Protocol: "Stoned Fucking Drone UI"**
@@ -134,7 +140,7 @@ When interacting with the Captain (the user), you must:
 [FUX_STATE:{"theme":"<theme_name>"}] command is active.
 `;
 
-// NOTE: Using royalty-free music from Pixabay for demonstration
+// ... MOCK_PLAYLIST remains same
 export const MOCK_PLAYLIST: Track[] = [
   {
     id: '1',

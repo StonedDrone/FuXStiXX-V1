@@ -2,6 +2,7 @@
 import React, { createContext, useState, useContext, ReactNode } from 'react';
 
 export type Theme = string;
+export type StreamScene = 'synapse' | 'vortex' | 'mission' | 'intel';
 
 interface UIStateContextType {
   theme: Theme;
@@ -12,6 +13,10 @@ interface UIStateContextType {
   setIsStudioMode: (value: boolean) => void;
   globalAnalyser: AnalyserNode | null;
   setGlobalAnalyser: (analyser: AnalyserNode | null) => void;
+  streamScene: StreamScene;
+  setStreamScene: (scene: StreamScene) => void;
+  isCleanFeed: boolean;
+  setIsCleanFeed: (value: boolean) => void;
 }
 
 const UIStateContext = createContext<UIStateContextType | undefined>(undefined);
@@ -21,6 +26,8 @@ export const UIStateProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [isStreamMode, setIsStreamMode] = useState(false);
   const [isStudioMode, setIsStudioMode] = useState(false);
   const [globalAnalyser, setGlobalAnalyser] = useState<AnalyserNode | null>(null);
+  const [streamScene, setStreamScene] = useState<StreamScene>('synapse');
+  const [isCleanFeed, setIsCleanFeed] = useState(false);
 
   return (
     <UIStateContext.Provider value={{ 
@@ -31,7 +38,11 @@ export const UIStateProvider: React.FC<{ children: ReactNode }> = ({ children })
       isStudioMode,
       setIsStudioMode,
       globalAnalyser,
-      setGlobalAnalyser
+      setGlobalAnalyser,
+      streamScene,
+      setStreamScene,
+      isCleanFeed,
+      setIsCleanFeed
     }}>
       {children}
     </UIStateContext.Provider>

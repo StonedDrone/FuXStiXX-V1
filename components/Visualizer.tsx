@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect, useState } from 'react';
 
 declare const butterchurn: any;
@@ -8,7 +9,7 @@ interface VisualizerProps {
     isPlaying: boolean;
     themeColor: string;
     mode?: 'standard' | 'vortex';
-    customPreset?: string; // Content of .milk file
+    customPreset?: string; 
 }
 
 const Visualizer: React.FC<VisualizerProps> = ({ analyser, isPlaying, themeColor, mode = 'standard', customPreset }) => {
@@ -35,13 +36,24 @@ const Visualizer: React.FC<VisualizerProps> = ({ analyser, isPlaying, themeColor
                 visualizer.connectAudio(analyser);
                 butterchurnRef.current = visualizer;
                 
-                // Load a default preset from the library
                 const presets = butterchurnPresets.default.getPresets();
-                const presetNames = Object.keys(presets);
-                const randomPreset = presets[presetNames[Math.floor(Math.random() * presetNames.length)]];
-                visualizer.loadPreset(randomPreset, 0);
+                const presetNames = Object.keys(presets).filter(name => 
+                    !name.includes('flexi') // Filter out some overly heavy ones
+                );
+                const initialPreset = presets[presetNames[Math.floor(Math.random() * presetNames.length)]];
+                visualizer.loadPreset(initialPreset, 0);
                 
                 setIsVortexReady(true);
+
+                // Auto-cycle presets for streaming energy every 30s
+                const cycleInterval = setInterval(() => {
+                    if (isPlaying) {
+                        const randomKey = presetNames[Math.floor(Math.random() * presetNames.length)];
+                        visualizer.loadPreset(presets[randomKey], 5.7); // Smooth 5.7s transition
+                    }
+                }, 30000);
+
+                return () => clearInterval(cycleInterval);
             } catch (err) {
                 console.error("Vortex Engine failure:", err);
             }
@@ -53,14 +65,10 @@ const Visualizer: React.FC<VisualizerProps> = ({ analyser, isPlaying, themeColor
                 setIsVortexReady(false);
             }
         };
-    }, [mode, analyser]);
+    }, [mode, analyser, isPlaying]);
 
     useEffect(() => {
         if (isVortexReady && customPreset && butterchurnRef.current) {
-            // In a real implementation, we'd parse the .milk text. 
-            // Butterchurn expects a JSON-like object or a parsed preset.
-            // For now, we simulate a preset swap.
-            console.log("Injecting custom .milk math-script...");
             const presets = butterchurnPresets.default.getPresets();
             const keys = Object.keys(presets);
             butterchurnRef.current.loadPreset(presets[keys[Math.floor(Math.random() * keys.length)]], 2.0);
@@ -81,13 +89,20 @@ const Visualizer: React.FC<VisualizerProps> = ({ analyser, isPlaying, themeColor
             } else if (mode === 'standard' && ctx && analyser) {
                 analyser.getByteFrequencyData(dataArray);
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
-                const barWidth = (canvas.width / bufferLength) * 1.5;
-                let x = 0;
-                for (let i = 0; i < bufferLength; i++) {
-                    const barHeight = dataArray[i] / 2.5;
-                    ctx.fillStyle = themeColor;
-                    ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
-                    x += barWidth + 2;
+                
+                // BeatDrop Style Signal Visualization
+                const barCount = 128;
+                const barWidth = canvas.width / barCount;
+                for (let i = 0; i < barCount; i++) {
+                    const idx = Math.floor(i * (bufferLength / barCount));
+                    const barHeight = (dataArray[idx] / 255) * canvas.height;
+                    
+                    const gradient = ctx.createLinearGradient(0, canvas.height, 0, canvas.height - barHeight);
+                    gradient.addColorStop(0, themeColor);
+                    gradient.addColorStop(1, '#ffffff');
+                    
+                    ctx.fillStyle = gradient;
+                    ctx.fillRect(i * barWidth, canvas.height - barHeight, barWidth - 1, barHeight);
                 }
             } else if (ctx) {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -102,19 +117,11 @@ const Visualizer: React.FC<VisualizerProps> = ({ analyser, isPlaying, themeColor
     }, [analyser, isPlaying, themeColor, mode, isVortexReady]);
 
     return (
-        <div className="h-32 bg-black w-full relative group">
+        <div className="h-full w-full bg-black relative group overflow-hidden">
             <canvas 
                 ref={canvasRef} 
-                width="800" 
-                height="128" 
-                className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" 
+                className="w-full h-full object-cover" 
             />
-            {mode === 'vortex' && (
-                <div className="absolute top-2 right-2 flex items-center space-x-2">
-                    <span className="w-2 h-2 bg-primary rounded-full animate-ping"></span>
-                    <span className="text-[10px] font-mono text-primary uppercase tracking-tighter bg-black/40 px-2 py-0.5 rounded">Vortex Sync</span>
-                </div>
-            )}
         </div>
     );
 };

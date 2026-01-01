@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { Part } from "@google/genai";
 import { Message, ActiveModel } from '../types';
@@ -19,6 +18,7 @@ import { useEmotionDetection } from '../hooks/useEmotionDetection';
 import HUDOverlay from './HUDOverlay';
 import MediaForge from './MediaForge';
 import LiveSyncStatus from './LiveSyncStatus';
+import CameraView from './CameraView';
 
 declare const window: any;
 
@@ -76,8 +76,10 @@ interface PendingFile {
     preview?: string;
     content?: string;
     isImage: boolean;
+    emotion?: string;
 }
 
+// Fixed missing closing logic and default export for ChatInterface
 const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ activeModel, setActiveModel, isTfReady, messages, setMessages }, ref) => {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -89,7 +91,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [activeForge, setActiveForge] = useState<QuickActionType | null>(null);
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
-  const { isStreamMode, globalAnalyser, setGlobalAnalyser } = useUIState();
+  const { isStreamMode, globalAnalyser, setGlobalAnalyser, setTheme } = useUIState();
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -99,6 +101,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     isSyncing: isBioSyncing, 
     startDetection, 
     stopDetection, 
+    analyzeImage,
     stream: cameraStream 
   } = useEmotionDetection();
   
@@ -109,7 +112,6 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
   const outputAudioContextRef = useRef<AudioContext | null>(null);
   const nextStartTimeRef = useRef(0);
   const activeSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
-  const cameraPreviewRef = useRef<HTMLVideoElement>(null);
   const liveSynapseHistoryRef = useRef<{user: string, ai: string}>({user: '', ai: ''});
 
   useImperativeHandle(ref, () => ({ clearChat: () => resetChat() }));
@@ -119,23 +121,14 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
   }, [messages, isLoading]);
 
   useEffect(() => {
-      if (isCameraActive) {
-          startDetection();
-      } else {
-          stopDetection();
-      }
-  }, [isCameraActive, startDetection, stopDetection]);
-
-  useEffect(() => {
-      if (cameraPreviewRef.current && cameraStream) {
-          cameraPreviewRef.current.srcObject = cameraStream;
-      }
-  }, [cameraStream]);
+      startDetection();
+      return () => stopDetection();
+  }, [startDetection, stopDetection]);
 
   // Listener for Sidebar power selections
   useEffect(() => {
     const handlePowerEvent = (e: any) => {
-      const prompt = e.detail?.prompt;
+      const prompt = e.detail?.detail?.prompt || e.detail?.prompt;
       if (prompt) {
          if (prompt.startsWith("Generate an image of:")) setActiveForge('image');
          else if (prompt.startsWith("Generate a video of:")) setActiveForge('video');
@@ -147,7 +140,7 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     return () => window.removeEventListener('fux-power-command', handlePowerEvent);
   }, []);
 
-  // Speech Recognition for standard Dictation (Non-Live mode)
+  // Speech Recognition
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRecognition) {
@@ -215,12 +208,10 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
 
     try {
       const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
       if (!outputAudioContextRef.current) {
           outputAudioContextRef.current = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
       }
       const ctx = outputAudioContextRef.current;
-      
       if (!globalAnalyser) {
           const analyzer = ctx.createAnalyser();
           analyzer.fftSize = 1024;
@@ -233,14 +224,11 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
             const buffer = await decodeAudioData(data, ctx);
             const source = ctx.createBufferSource();
             source.buffer = buffer;
-            
             source.connect(ctx.destination);
             if (globalAnalyser) source.connect(globalAnalyser);
-            
             nextStartTimeRef.current = Math.max(nextStartTimeRef.current, ctx.currentTime);
             source.start(nextStartTimeRef.current);
             nextStartTimeRef.current += buffer.duration;
-            
             activeSourcesRef.current.add(source);
             source.onended = () => activeSourcesRef.current.delete(source);
         },
@@ -310,7 +298,6 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
             const inputData = e.inputBuffer.getChannelData(0);
             session.sendRealtimeInput({ media: { data: encodePCM(inputData), mimeType: 'audio/pcm;rate=16000' } });
         };
-        
         source.connect(processor);
         processor.connect(inputCtx.destination);
       });
@@ -325,13 +312,11 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
-
     const newPending: PendingFile[] = await Promise.all(files.map(async (file: File) => {
         const id = Math.random().toString(36).substring(7);
         const isImage = file.type.startsWith('image/');
         let preview = undefined;
         let content = undefined;
-
         if (isImage) {
             preview = await new Promise<string>((resolve) => {
                 const reader = new FileReader();
@@ -341,12 +326,28 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
         } else {
             content = await file.text();
         }
-
         return { id, file, preview, content, isImage };
     }));
-
     setPendingFiles(prev => [...prev, ...newPending]);
     if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleCameraCapture = async (file: File) => {
+    const id = 'cap-' + Date.now();
+    const preview = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target?.result as string);
+        reader.readAsDataURL(file);
+    });
+    const detectedEmotion = await analyzeImage(file);
+    setPendingFiles(prev => [...prev, {
+        id,
+        file,
+        preview,
+        isImage: true,
+        emotion: detectedEmotion?.emotion
+    }]);
+    setIsCameraActive(false);
   };
 
   const removePendingFile = (id: string) => {
@@ -366,7 +367,6 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
 
     setIsLoading(true);
     setQuotaError(false);
-
     const userMessage: Message = { 
         id: Date.now().toString(), 
         text: userMessageText, 
@@ -375,26 +375,27 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     };
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
-
     const aiResponseId = (Date.now() + 1).toString();
     setMessages((prev) => [...prev, { id: aiResponseId, text: '', sender: 'ai', status: 'generating' }]);
 
     try {
         const parts: Part[] = [];
-        
-        if (isCameraActive && currentEmotion) {
+        if (currentEmotion) {
             parts.push({ text: `[CAPTAIN_BIO_SIGNATURE: ${currentEmotion.emotion.toUpperCase()} (${(currentEmotion.score * 100).toFixed(0)}% confidence)] ` });
         }
-
         for (const pf of pendingFiles) {
             if (pf.isImage && pf.preview) {
                 const b64 = pf.preview.split(',')[1];
+                let attachmentPrefix = "";
+                if (pf.emotion) {
+                    attachmentPrefix = `[ATTACHMENT_BIO_STATE: ${pf.emotion.toUpperCase()}] `;
+                }
+                parts.push({ text: attachmentPrefix });
                 parts.push({ inlineData: { data: b64, mimeType: pf.file.type } });
             } else if (pf.content) {
                 parts.push({ text: `\n--- START OF FILE ${pf.file.name} ---\n${pf.content}\n--- END OF FILE ---\n` });
             }
         }
-
         parts.push({ text: userMessageText });
 
         const stream = await sendMessageToAI(messages, parts);
@@ -404,20 +405,39 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
         for await (const chunk of stream) {
             if (chunk.text) {
                 fullText += chunk.text;
+                // Parse for FUX_STATE theme commands
+                const stateMatch = fullText.match(/\[FUX_STATE:(\{.*?\})\]/);
+                if (stateMatch) {
+                    try {
+                        const state = JSON.parse(stateMatch[1]);
+                        if (state.theme) setTheme(state.theme);
+                    } catch (e) {
+                        console.warn("Failed to parse FUX_STATE:", e);
+                    }
+                }
             }
             const metadata = (chunk as any).candidates?.[0]?.groundingMetadata;
             if (metadata?.groundingChunks) {
                 groundingChunks = [...groundingChunks, ...metadata.groundingChunks];
             }
-            
             if ((chunk as any).functionCalls) {
                 for (const fc of (chunk as any).functionCalls) {
                     if (fc.name === 'terminal_op') {
                         window.dispatchEvent(new CustomEvent('fux-terminal-relay', { detail: { text: fc.args.command, type: 'output' } }));
                     }
+                    if (fc.name === 'image_generation_op') {
+                        handleGenerateMedia(`Generate an image of: ${fc.args.prompt} | aspectRatio: ${fc.args.aspect_ratio || '1:1'}`);
+                    }
+                    if (fc.name === 'image_editing_op') {
+                        const targetImage = pendingFiles.find(f => f.isImage);
+                        if (targetImage) {
+                             handleAlchemy(fc.args.prompt);
+                        } else {
+                             fullText += `\n[SYSTEM] I attempted to edit an image but no subject was attached. Please provide the image you want me to modify.`;
+                        }
+                    }
                 }
             }
-
             setMessages((prev) => prev.map((msg) => msg.id === aiResponseId ? { 
                 ...msg, 
                 text: fullText,
@@ -432,35 +452,27 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
     } catch (error: any) {
         const isQuota = error.message?.includes('429') || error.message?.includes('quota');
         const isNotFound = error.message?.includes("Requested entity was not found.");
-        
         if (isQuota) setQuotaError(true);
         if (isNotFound && window.aistudio?.openSelectKey) {
             await window.aistudio.openSelectKey();
         }
-
         setMessages(prev => prev.map((msg) => msg.id === aiResponseId ? { ...msg, text: isQuota ? "Tactical uplink saturated. Switch to Private Uplink to continue mission." : `Core Error: ${error.message}`, status: 'error' } : msg));
     } finally {
         setIsLoading(false);
     }
-  }, [input, messages, setMessages, pendingFiles, isCameraActive, currentEmotion]);
+  }, [input, messages, setMessages, pendingFiles, currentEmotion, setTheme]);
 
   const handleGenerateMedia = async (command: string, attachment?: { data: string, mimeType: string }) => {
       setIsLoading(true);
       const isVideo = command.startsWith("Generate a video of:");
-      const userMessageId = Date.now().toString();
-      setMessages(prev => [...prev, { id: userMessageId, text: command, sender: 'user' }]);
-
       const aiResponseId = (Date.now() + 1).toString();
       setMessages(prev => [...prev, { id: aiResponseId, text: isVideo ? 'Engaging Veo Animate...' : 'Engaging Forge Synthesis...', sender: 'ai', status: 'generating' }]);
-
       try {
           if (isVideo) {
             const prompt = command.split('|')[0].replace("Generate a video of:", "").trim();
             const arMatch = command.match(/aspectRatio:\s*([\d:]+)/);
             const aspectRatio = (arMatch ? arMatch[1] : "16:9") as '16:9' | '9:16';
-            
             const videoUrl = await generateVideoVeo(prompt, attachment?.data, attachment?.mimeType, aspectRatio);
-            
             setMessages(prev => prev.map(m => m.id === aiResponseId ? {
                 ...m,
                 text: "Veo synthesis complete, Captain. Motion data stabilized.",
@@ -471,12 +483,9 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
             const prompt = command.split('|')[0].replace("Generate an image of:", "").trim();
             const arMatch = command.match(/aspectRatio:\s*([\d:]+)/);
             const szMatch = command.match(/imageSize:\s*([\w]+)/);
-            
             const aspectRatio = arMatch ? arMatch[1] : "1:1";
             const imageSize = szMatch ? szMatch[1] : "1K";
-
             const { imageUrl, textResponse } = await generateImagePro(prompt, aspectRatio, imageSize);
-            
             setMessages(prev => prev.map(m => m.id === aiResponseId ? {
                 ...m,
                 text: textResponse || "Synthesis complete, Captain.",
@@ -501,7 +510,6 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
       setIsLoading(true);
       const aiResponseId = Date.now().toString();
       setMessages(prev => [...prev, { id: aiResponseId, text: 'Alchemy in progress...', sender: 'ai', status: 'generating' }]);
-      
       try {
           const b64 = pendingImage.preview.split(',')[1];
           const { editedImageUrl, textResponse } = await editImageWithAI(b64, pendingImage.file.type, prompt);
@@ -526,6 +534,26 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
         handleSend(messages[messages.length - 1]?.text); 
     }
   };
+
+  const handleEditMediaFromChat = useCallback((msg: Message) => {
+    if (msg.media?.url && msg.media.type === 'image') {
+        fetch(msg.media.url)
+            .then(res => res.blob())
+            .then(blob => {
+                const file = new File([blob], "re-edit-subject.png", { type: blob.type });
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    setPendingFiles(prev => [...prev, {
+                        id: 'edit-' + Date.now(),
+                        file,
+                        preview: e.target?.result as string,
+                        isImage: true
+                    }]);
+                };
+                reader.readAsDataURL(file);
+            });
+    }
+  }, []);
 
   return (
     <div className={`relative flex flex-col h-full bg-base p-4 overflow-hidden`}>
@@ -567,29 +595,19 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
       )}
       
       {isCameraActive && !isStreamMode && (
-          <div className="absolute top-24 right-10 z-10 w-64 aspect-video bg-black border border-primary/40 rounded shadow-2xl shadow-primary/10 animate-in fade-in zoom-in duration-500 group">
-              <video 
-                  ref={cameraPreviewRef} 
-                  autoPlay 
-                  playsInline 
-                  muted 
-                  className="w-full h-full object-cover grayscale brightness-125 opacity-70 group-hover:opacity-100 transition-opacity"
-              />
-              <div className="absolute inset-0 border-[1px] border-primary/20 pointer-events-none"></div>
-              <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-primary/20 backdrop-blur-sm rounded-sm text-[7px] font-mono text-primary uppercase tracking-widest border border-primary/40 animate-pulse">
-                  Bio_Link_Optical
-              </div>
-              {currentEmotion && (
-                  <div className="absolute bottom-2 left-2 right-2 px-2 py-1 bg-black/60 backdrop-blur-sm rounded-sm border border-primary/10 text-[9px] font-mono text-primary flex justify-between items-center">
-                      <span className="uppercase">{currentEmotion.emotion}</span>
-                      <span>{(currentEmotion.score * 100).toFixed(0)}%</span>
-                  </div>
-              )}
-          </div>
+          <CameraView 
+            onClose={() => setIsCameraActive(false)}
+            onCapture={handleCameraCapture}
+          />
       )}
 
       <div className={`flex-1 overflow-y-auto pr-2 custom-scrollbar ${isStreamMode ? 'pt-4' : 'pt-20'}`}>
-          <div className="space-y-6">{messages.map((msg) => (<ChatMessage key={msg.id} message={msg} onEditMedia={() => {}} />))}<div ref={chatEndRef} /></div>
+          <div className="space-y-6">
+            {messages.map((msg) => (
+              <ChatMessage key={msg.id} message={msg} onEditMedia={handleEditMediaFromChat} />
+            ))}
+            <div ref={chatEndRef} />
+          </div>
       </div>
       
       {!isStreamMode && (
@@ -599,66 +617,100 @@ const ChatInterface = forwardRef<ChatInterfaceHandle, ChatInterfaceProps>(({ act
                   {pendingFiles.map((pf) => (
                     <div key={pf.id} className="relative group flex items-center p-2 bg-layer-1 rounded-lg border border-primary/30 min-w-[150px] max-w-[250px]">
                         {pf.isImage && pf.preview ? (
-                            <div className="w-8 h-8 rounded bg-primary/20 flex items-center justify-center mr-2 overflow-hidden flex-shrink-0">
-                                <img src={pf.preview} className="w-full h-full object-cover" alt="pending" />
-                            </div>
+                            <img src={pf.preview} alt="upload preview" className="w-10 h-10 object-cover rounded border border-primary/20 mr-2" />
                         ) : (
-                            <div className="w-8 h-8 rounded bg-layer-2 flex items-center justify-center mr-2 text-[10px] text-primary/60 font-mono border border-primary/10 flex-shrink-0">
-                                DOC
-                            </div>
+                            <div className="w-10 h-10 bg-layer-2 rounded flex items-center justify-center mr-2"><PaperclipIcon /></div>
                         )}
-                        <span className="text-[10px] font-mono text-secondary truncate flex-1" title={pf.file.name}>{pf.file.name}</span>
-                        <button onClick={() => removePendingFile(pf.id)} className="p-1 text-gray-500 hover:text-danger ml-1"><XIcon /></button>
+                        <span className="text-[10px] font-mono text-secondary truncate flex-1">{pf.file.name}</span>
+                        <button onClick={() => removePendingFile(pf.id)} className="p-1 text-secondary/40 hover:text-danger"><XIcon /></button>
                     </div>
                   ))}
               </div>
           )}
-          <div className="relative flex items-center">
-              <button onClick={() => setIsPowersOpen(!isPowersOpen)} className="p-2 mr-2 rounded-full bg-layer-1 text-secondary hover:text-primary transition-colors"><ZapIcon /></button>
-              <textarea 
-                value={input} 
-                onChange={(e) => setInput(e.target.value)} 
-                onKeyPress={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }} 
-                placeholder={isVoiceActive ? "Live Synapse: FuXStiXX is listening..." : isDictating ? "Listening for Voice Command..." : "Command the Chaos Engine..."} 
-                className={`w-full bg-layer-1 border border-layer-3 rounded-lg p-3 pr-[180px] text-gray-200 focus:outline-none focus:ring-1 focus:ring-primary font-mono text-sm transition-all ${isDictating || isVoiceActive ? 'ring-1 ring-primary bg-primary/5' : ''}`} 
-                rows={1} 
-                disabled={isVoiceActive}
-              />
-              <div className="absolute right-3 flex items-center space-x-1">
-                  <button onClick={() => fileInputRef.current?.click()} className="p-2 text-secondary hover:text-primary transition-all" title="Uplink Tactical Payload (Images/Files)"><PaperclipIcon /></button>
-                  <button onClick={() => setIsCameraActive(!isCameraActive)} className={`p-2 rounded-lg transition-all ${isCameraActive ? 'text-primary bg-primary/10' : 'text-secondary hover:text-primary'}`} title="Engage Optical Bio-Link"><VideoCameraIcon /></button>
-                  <button onClick={toggleLiveSynapse} className={`p-2 rounded-lg transition-all ${isVoiceActive ? 'text-primary bg-primary/20 animate-pulse scale-110 shadow-lg shadow-primary/20' : 'text-secondary hover:text-primary'}`} title="Live Synapse (Full Voice Mission)"><MicrophoneIcon /></button>
-                  {!isVoiceActive && (
-                    <button onClick={toggleDictation} className={`p-2 rounded-lg transition-all ${isDictating ? 'text-danger bg-danger/10 animate-pulse' : 'text-secondary hover:text-primary opacity-50'}`} title="Quick Voice Command Dictation">🎙️</button>
-                  )}
-                  <button onClick={() => handleSend()} className="p-2 bg-primary text-black rounded-lg hover:scale-105" title="Transmit Message" disabled={isVoiceActive}><SendIcon /></button>
-              </div>
-              <input type="file" ref={fileInputRef} className="hidden" multiple accept="image/*,.txt,.js,.ts,.tsx,.json,.css,.html,.md,.log" onChange={handleFileUpload} />
-              {isPowersOpen && <PowersDropdown onPowerClick={(p) => { 
-                if (p.startsWith("Generate an image of:")) setActiveForge('image');
-                else if (p.startsWith("Generate a video of:")) setActiveForge('video');
-                else if (p.startsWith("Generate music of:")) setActiveForge('audio');
-                else if (p.startsWith("Image Alchemy")) {
-                    const promptPart = p.split('| prompt: ')[1] || '';
-                    if (pendingFiles.some(f => f.isImage)) handleAlchemy(promptPart);
-                    else alert("Captain, provide an image subject for Alchemy first.");
-                }
-                else setInput(p);
-                setIsPowersOpen(false); 
-              }} onClose={() => setIsPowersOpen(false)} />}
+          
+          <div className="flex items-center space-x-2 relative">
+             <div className="relative">
+                <button 
+                  onClick={() => setIsPowersOpen(!isPowersOpen)}
+                  className={`p-3 rounded-full transition-all duration-300 ${isPowersOpen ? 'bg-primary text-black rotate-45 shadow-[0_0_15px_var(--color-primary)]' : 'bg-layer-2 text-primary hover:bg-layer-3'}`}
+                  aria-label="Toggle Chaos Powers"
+                >
+                  <ZapIcon />
+                </button>
+                {isPowersOpen && <PowersDropdown onPowerClick={(p) => { setInput(p); setIsPowersOpen(false); }} onClose={() => setIsPowersOpen(false)} />}
+             </div>
+
+             <button 
+                onClick={() => fileInputRef.current?.click()}
+                className="p-3 rounded-full bg-layer-2 text-secondary hover:bg-layer-3 hover:text-primary transition-all"
+                aria-label="Attach Intel"
+                title="Attach Files/Code"
+             >
+                <PaperclipIcon />
+             </button>
+             <input type="file" multiple ref={fileInputRef} className="hidden" onChange={handleFileUpload} />
+
+             <button 
+                onClick={() => setIsCameraActive(true)}
+                className="p-3 rounded-full bg-layer-2 text-secondary hover:bg-layer-3 hover:text-primary transition-all"
+                aria-label="Optical Link"
+                title="Camera/Vision Capture"
+             >
+                <VideoCameraIcon />
+             </button>
+
+             <div className="flex-1 relative flex items-center">
+                <textarea
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSend();
+                    }
+                  }}
+                  placeholder="Issue command to FuXStiXX..."
+                  className="w-full bg-layer-2 border border-layer-3 rounded-full py-3 px-6 pr-12 text-secondary focus:outline-none focus:ring-1 focus:ring-primary/50 resize-none h-12 custom-scrollbar font-mono text-sm leading-tight"
+                />
+                <div className="absolute right-2 flex items-center space-x-1">
+                    {MEDIA_QUICK_ACTIONS.map(action => (
+                        <button
+                            key={action.type}
+                            onClick={() => setActiveForge(action.type)}
+                            className="p-2 text-secondary/40 hover:text-primary transition-colors text-lg"
+                            title={action.name}
+                        >
+                            {action.emoji}
+                        </button>
+                    ))}
+                </div>
+             </div>
+
+             <button
+                onClick={() => handleSend()}
+                disabled={isLoading || (!input.trim() && pendingFiles.length === 0)}
+                className="p-3 rounded-full bg-primary text-black hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_10px_var(--color-primary)]"
+             >
+                <SendIcon />
+             </button>
+
+             <button
+                onClick={toggleDictation}
+                className={`p-3 rounded-full transition-all duration-300 ${isDictating || isVoiceActive ? 'bg-danger text-white animate-pulse shadow-[0_0_15px_#f85149]' : 'bg-layer-2 text-secondary hover:text-primary'}`}
+                aria-label="Voice Link"
+             >
+                <MicrophoneIcon />
+             </button>
           </div>
         </div>
       )}
 
       {activeForge && (
-        <MediaForge 
-          type={activeForge} 
-          onClose={() => setActiveForge(null)} 
-          onExecute={(p, att) => {
-            handleSend(p, att);
-            setActiveForge(null);
-          }}
-        />
+          <MediaForge 
+            type={activeForge} 
+            onClose={() => setActiveForge(null)} 
+            onExecute={(p, att) => { handleSend(p, att); setActiveForge(null); }} 
+          />
       )}
     </div>
   );

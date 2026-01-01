@@ -39,7 +39,7 @@ const HUDOverlay: React.FC<HUDOverlayProps> = ({
     const [hexLogs, setHexLogs] = useState<string[]>([]);
     const [engineLoad, setEngineLoad] = useState(12);
     const [compassPos, setCompassPos] = useState(0);
-    const { isStreamMode, setIsStreamMode } = useUIState();
+    const { isStreamMode, setIsStreamMode, theme } = useUIState();
 
     useEffect(() => {
         const interval = setInterval(() => {
@@ -101,6 +101,46 @@ const HUDOverlay: React.FC<HUDOverlayProps> = ({
                 </div>
                 <div className="w-1 h-3 bg-primary/60 mt-[-1px] z-10"></div>
             </div>
+
+            {/* Emergent State: Focused Tendril Swarm */}
+            {theme === 'focused-tendril-swarm' && (
+                <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-40">
+                    <svg className="w-full h-full animate-pulse" viewBox="0 0 100 100" preserveAspectRatio="none">
+                        <defs>
+                            <filter id="glow">
+                                <feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
+                                <feMerge>
+                                    <feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/>
+                                </feMerge>
+                            </filter>
+                        </defs>
+                        {Array.from({ length: 12 }).map((_, i) => (
+                            <path 
+                                key={i}
+                                d={`M ${10 + i * 8} 0 Q ${20 + i * 2} 50 ${10 + i * 8} 100`}
+                                fill="none"
+                                stroke="var(--color-primary)"
+                                strokeWidth="0.1"
+                                className="animate-tendrils"
+                                style={{ animationDelay: `${i * 0.3}s` }}
+                                filter="url(#glow)"
+                            />
+                        ))}
+                    </svg>
+                </div>
+            )}
+
+            {/* Emergent State: Chaotic Pulse Omen */}
+            {theme === 'chaotic-pulse-omen' && (
+                <div className="absolute inset-0 pointer-events-none flex items-center justify-center bg-danger/5 animate-glitch">
+                    <div className="text-[200px] font-bold text-danger/10 font-mono select-none">OMEN</div>
+                    <div className="absolute top-24 left-1/2 -translate-x-1/2 flex space-x-8 opacity-40">
+                        <div className="w-12 h-12 border-4 border-danger rounded-full animate-ping"></div>
+                        <div className="w-12 h-12 border-4 border-danger rounded-full animate-ping" style={{ animationDelay: '0.2s' }}></div>
+                        <div className="w-12 h-12 border-4 border-danger rounded-full animate-ping" style={{ animationDelay: '0.4s' }}></div>
+                    </div>
+                </div>
+            )}
 
             {/* Top Engine Status */}
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[90%] h-14 bg-gradient-to-b from-primary/10 to-transparent border-x border-primary/10 rounded-b-3xl flex items-center justify-around px-8 backdrop-blur-[1px]">

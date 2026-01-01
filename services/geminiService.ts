@@ -44,6 +44,29 @@ export const toolDeclarations: FunctionDeclaration[] = [
       },
       required: ['action']
     }
+  },
+  {
+    name: 'image_generation_op',
+    parameters: {
+      type: Type.OBJECT,
+      description: 'Generate a new image from a text prompt.',
+      properties: {
+        prompt: { type: Type.STRING, description: 'A detailed description of the image to generate.' },
+        aspect_ratio: { type: Type.STRING, enum: ['1:1', '3:4', '4:3', '9:16', '16:9'], description: 'Desired aspect ratio.' }
+      },
+      required: ['prompt']
+    }
+  },
+  {
+    name: 'image_editing_op',
+    parameters: {
+      type: Type.OBJECT,
+      description: 'Edit an existing image using a text prompt (e.g., "add a filter", "remove person").',
+      properties: {
+        prompt: { type: Type.STRING, description: 'Instructions on how to edit the image.' }
+      },
+      required: ['prompt']
+    }
   }
 ];
 
@@ -87,7 +110,7 @@ export const sendMessageToAI = async (history: Message[], currentUserMessagePart
         model: model,
         contents: contents,
         config: {
-            systemInstruction: AI_PERSONA_INSTRUCTION + "\nAwareness: You can see the Captain's bio-signature (emotion) if optical links are active. Adjust your tone and empathy levels accordingly to support the mission.",
+            systemInstruction: AI_PERSONA_INSTRUCTION + "\nAwareness: You can see the Captain's bio-signature (emotion) if optical links are active. Adjust your tone and empathy levels accordingly to support the mission. You can generate or edit images if requested using the provided tools.",
             tools: tools.length > 0 ? tools : [{ functionDeclarations: toolDeclarations }],
             toolConfig: toolConfig
         },
@@ -97,12 +120,12 @@ export const sendMessageToAI = async (history: Message[], currentUserMessagePart
 export const generateImagePro = async (prompt: string, aspectRatio: string = "1:1", imageSize: string = "1K") => {
     const ai = getAI();
     const response = await ai.models.generateContent({
-        model: 'gemini-3-pro-image-preview',
+        model: 'gemini-2.5-flash-image', // Defaulting to 2.5 Flash Image per guidelines unless high-res requested
         contents: { parts: [{ text: prompt }] },
         config: {
             imageConfig: {
                 aspectRatio: aspectRatio as any,
-                imageSize: imageSize as any
+                // imageSize: imageSize as any // Not supported on nano banana
             }
         },
     });
